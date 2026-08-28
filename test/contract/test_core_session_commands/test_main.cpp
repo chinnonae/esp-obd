@@ -2,6 +2,7 @@
 
 #include <string>
 
+#include "../../support/in_memory_settings_store.h"
 #include "core/build_info.h"
 #include "elm/elm_command_engine.h"
 
@@ -38,14 +39,16 @@ static void assertSessionIsDefault(const ElmSession& s) {
 }
 
 void test_atz_resets_every_default_and_returns_identity() {
-  ElmCommandEngine engine;
+  InMemorySettingsStore engineStore;
+  ElmCommandEngine engine(engineStore);
   ElmReply reply = engine.execute("ATZ");
   TEST_ASSERT_TRUE(std::string(reply.text.c_str()).rfind(esp_obd::build::kElmVersion, 0) == 0);
   assertSessionIsDefault(engine.session());
 }
 
 void test_atws_behaves_like_atz() {
-  ElmCommandEngine engine;
+  InMemorySettingsStore engineStore;
+  ElmCommandEngine engine(engineStore);
   // Mutate away from defaults first, to prove ATWS actually resets.
   engine.execute("ATE0");
   engine.execute("ATH1");
@@ -56,7 +59,8 @@ void test_atws_behaves_like_atz() {
 }
 
 void test_atd_resets_defaults_and_returns_ok() {
-  ElmCommandEngine engine;
+  InMemorySettingsStore engineStore;
+  ElmCommandEngine engine(engineStore);
   engine.execute("ATE0");
 
   ElmReply reply = engine.execute("ATD");
@@ -65,7 +69,8 @@ void test_atd_resets_defaults_and_returns_ok() {
 }
 
 void test_ati_returns_identity_without_state_change() {
-  ElmCommandEngine engine;
+  InMemorySettingsStore engineStore;
+  ElmCommandEngine engine(engineStore);
   engine.execute("ATE0");
   ElmSession before = engine.session();
 
@@ -75,7 +80,8 @@ void test_ati_returns_identity_without_state_change() {
 }
 
 void test_at1_returns_adapter_description() {
-  ElmCommandEngine engine;
+  InMemorySettingsStore engineStore;
+  ElmCommandEngine engine(engineStore);
   ElmReply reply = engine.execute("AT@1");
   TEST_ASSERT_TRUE(std::string(reply.text.c_str()).rfind(esp_obd::build::kAdapterDescription, 0) ==
                     0);
@@ -84,7 +90,8 @@ void test_at1_returns_adapter_description() {
 // --- Toggles: ATE, ATL, ATS, ATH, ATD0/1, ATR -----------------------------
 
 void test_ate_toggles_echo() {
-  ElmCommandEngine engine;
+  InMemorySettingsStore engineStore;
+  ElmCommandEngine engine(engineStore);
   engine.execute("ATE0");
   TEST_ASSERT_FALSE(engine.session().echoEnabled);
   engine.execute("ATE1");
@@ -92,7 +99,8 @@ void test_ate_toggles_echo() {
 }
 
 void test_atl_ok_uses_new_line_ending_mode() {
-  ElmCommandEngine engine;
+  InMemorySettingsStore engineStore;
+  ElmCommandEngine engine(engineStore);
   ElmReply reply = engine.execute("ATL1");
   // The OK for *this* command already uses the new (just-set) L1 ending.
   TEST_ASSERT_EQUAL_STRING("OK\r\n\r\n", reply.text.c_str());
@@ -100,7 +108,8 @@ void test_atl_ok_uses_new_line_ending_mode() {
 }
 
 void test_ats_toggles_spaces() {
-  ElmCommandEngine engine;
+  InMemorySettingsStore engineStore;
+  ElmCommandEngine engine(engineStore);
   engine.execute("ATS0");
   TEST_ASSERT_FALSE(engine.session().spacesEnabled);
   engine.execute("ATS1");
@@ -108,7 +117,8 @@ void test_ats_toggles_spaces() {
 }
 
 void test_ath_toggles_headers() {
-  ElmCommandEngine engine;
+  InMemorySettingsStore engineStore;
+  ElmCommandEngine engine(engineStore);
   engine.execute("ATH1");
   TEST_ASSERT_TRUE(engine.session().headersEnabled);
   engine.execute("ATH0");
@@ -116,7 +126,8 @@ void test_ath_toggles_headers() {
 }
 
 void test_atd01_toggles_display_dlc_only() {
-  ElmCommandEngine engine;
+  InMemorySettingsStore engineStore;
+  ElmCommandEngine engine(engineStore);
   engine.execute("ATD1");
   TEST_ASSERT_TRUE(engine.session().displayDlcEnabled);
   engine.execute("ATD0");
@@ -124,7 +135,8 @@ void test_atd01_toggles_display_dlc_only() {
 }
 
 void test_atr_toggles_responses() {
-  ElmCommandEngine engine;
+  InMemorySettingsStore engineStore;
+  ElmCommandEngine engine(engineStore);
   engine.execute("ATR0");
   TEST_ASSERT_FALSE(engine.session().responsesEnabled);
   engine.execute("ATR1");
@@ -134,14 +146,16 @@ void test_atr_toggles_responses() {
 // --- Empty-command repeat and malformed-command isolation -----------------
 
 void test_empty_command_before_any_previous_produces_no_response() {
-  ElmCommandEngine engine;
+  InMemorySettingsStore engineStore;
+  ElmCommandEngine engine(engineStore);
   ElmReply reply = engine.execute("");
   TEST_ASSERT_EQUAL(static_cast<int>(ElmReplyKind::NoReply), static_cast<int>(reply.kind));
   TEST_ASSERT_FALSE(reply.appendPrompt);
 }
 
 void test_empty_command_repeats_last_recognized_command() {
-  ElmCommandEngine engine;
+  InMemorySettingsStore engineStore;
+  ElmCommandEngine engine(engineStore);
   engine.execute("ATE0");
   ElmReply repeated = engine.execute("");
   TEST_ASSERT_EQUAL_STRING("OK\r\r", repeated.text.c_str());
@@ -149,14 +163,16 @@ void test_empty_command_repeats_last_recognized_command() {
 }
 
 void test_malformed_command_does_not_become_the_repeat_target() {
-  ElmCommandEngine engine;
+  InMemorySettingsStore engineStore;
+  ElmCommandEngine engine(engineStore);
   engine.execute("ATBOGUS");        // malformed: returns '?', not stored
   ElmReply empty = engine.execute("");  // still "no previous [recognized] command"
   TEST_ASSERT_EQUAL(static_cast<int>(ElmReplyKind::NoReply), static_cast<int>(empty.kind));
 }
 
 void test_malformed_command_leaves_session_unchanged() {
-  ElmCommandEngine engine;
+  InMemorySettingsStore engineStore;
+  ElmCommandEngine engine(engineStore);
   engine.execute("ATE0");
   ElmSession before = engine.session();
 
@@ -166,8 +182,10 @@ void test_malformed_command_leaves_session_unchanged() {
 }
 
 void test_command_is_case_insensitive_and_ignores_spaces() {
-  ElmCommandEngine engine1;
-  ElmCommandEngine engine2;
+  InMemorySettingsStore engineStore1;
+  ElmCommandEngine engine1(engineStore1);
+  InMemorySettingsStore engineStore2;
+  ElmCommandEngine engine2(engineStore2);
   ElmReply r1 = engine1.execute("ate0");
   ElmReply r2 = engine2.execute("AT E0");
   TEST_ASSERT_EQUAL_STRING(r1.text.c_str(), r2.text.c_str());

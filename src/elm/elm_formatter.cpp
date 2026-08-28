@@ -4,16 +4,16 @@
 
 namespace esp_obd::elm {
 
-namespace {
-
-constexpr const char* kResponseEndingL0 = "\r\r";
-constexpr const char* kResponseEndingL1 = "\r\n\r\n";
-
 void appendHexByte(ElmReplyText& out, uint8_t value) {
   static const char kHexDigits[] = "0123456789ABCDEF";
   out += kHexDigits[(value >> 4) & 0xF];
   out += kHexDigits[value & 0xF];
 }
+
+namespace {
+
+constexpr const char* kResponseEndingL0 = "\r\r";
+constexpr const char* kResponseEndingL1 = "\r\n\r\n";
 
 void appendHexId(ElmReplyText& out, uint32_t id, bool extended) {
   char buf[9];

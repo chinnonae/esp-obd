@@ -1,6 +1,7 @@
 #include "elm/elm_command_engine.h"
 
 #include "elm/at_commands_core.h"
+#include "elm/at_commands_settings.h"
 #include "elm/elm_errors.h"
 #include "elm/elm_formatter.h"
 
@@ -28,6 +29,9 @@ ElmReply ElmCommandEngine::execute(const char* rawLine) {
   if (startsWithAt(normalized)) {
     const char* atRemainder = normalized.c_str() + 2;
     auto handled = dispatchCoreCommand(session_, atRemainder);
+    if (!handled.has_value()) {
+      handled = dispatchSettingsCommand(session_, persisted_, store_, atRemainder);
+    }
     if (handled.has_value()) {
       reply = *handled;
       recognized = true;

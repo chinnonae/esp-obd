@@ -1,6 +1,6 @@
 # T11 - Settings Persistence Commands
 
-**Status:** Planned
+**Status:** Done (started 2026-08-28, completed 2026-08-28)
 
 ## Goal
 
@@ -63,3 +63,46 @@ takes effect — entirely as portable code, with no ESP32 dependency.
   value; `M1` shows the new one.
 - `ATFE` followed by a fresh session read returns factory defaults for every
   persisted field.
+
+## Notes
+
+- `PersistedSettingsCache` ([include/elm/persisted_settings.h](../../include/elm/persisted_settings.h))
+  is deliberately a separate struct from `ElmSession`, not new fields added
+  to it: `ATZ`/`ATD`/`ATWS`'s `session.resetToDefaults()` does
+  `*this = ElmSession{}`, which would silently wipe the device id/saved
+  byte/`M` state on every reset if they lived there -- defeating the point
+  of persistence. `ElmCommandEngine` now holds both, loading the cache from
+  the store once at construction.
+- `ISettingsStore` ([include/core/i_settings_store.h](../../include/core/i_settings_store.h))
+  lives under `core/`, not `elm/`: it has no ELM-specific meaning, so `elm/`
+  depends on the interface the same way it already depends on `can/`
+  types. The in-memory fake (`test/support/in_memory_settings_store.h`)
+  stays test-only, matching this task's own framing -- it is never linked
+  into the firmware build.
+- `ElmCommandEngine`'s constructor now requires an `ISettingsStore&` (no
+  default), so every existing T03 test in `test/contract/
+  test_core_session_commands/` was updated to construct an
+  `InMemorySettingsStore` alongside the engine. This was judged worth the
+  churn over giving `ElmCommandEngine` a private owned fake store, which
+  would have put test-only code in a class that also runs on the target.
+- `M` (`ATM0`/`ATM1`) is session-level, not itself persisted: a fresh
+  engine always loads with persistence enabled, regardless of what `M` was
+  set to before. Only `AT@2`/`AT@3`/`ATRD`/`ATSDhh`'s *values* persist.
+- `dispatchSettingsCommand` is wired into `ElmCommandEngine::execute()`
+  right after `dispatchCoreCommand` in the same `AT` dispatch chain (T03's
+  `?` fallback still catches anything neither recognizes) -- not left as a
+  standalone module for a later task to integrate.
+- `appendHexByte` was promoted from `elm_formatter.cpp`'s anonymous
+  namespace to a declared function in `elm_formatter.h`, so `ATRD`'s
+  two-hex-digit rendering reuses it instead of duplicating the hex-digit
+  table.
+- New suite `test/contract/test_settings_persistence_commands/`: `AT@2`
+  default and round-trip, `AT@3` length/hex validation, `ATRD`/`ATSDhh`
+  round-trip and validation, `M0` blocking a store write while still
+  applying in-session (verified against a *second, fresh* engine over the
+  same store standing in for a reconnect), `M1` persisting by default and
+  after a prior `M0`, and `ATFE` restoring defaults both immediately and
+  in the store.
+
+Verified: `pio test -e native_test` (95/95 passing across nine suites) and
+`pio run -e ioxesp32` still builds.

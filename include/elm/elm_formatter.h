@@ -22,6 +22,11 @@ const char* responseEnding(const ElmSession& session);
 // Wraps `body` with the current response ending into a complete Text reply.
 ElmReply textReply(const ElmSession& session, const char* body);
 
+// Appends two uppercase hex digits for `value`. Shared by response-body
+// rendering and any handler needing the same "one byte as hex" spelling
+// (e.g. T11's ATRD), so it isn't duplicated per file.
+void appendHexByte(ElmReplyText& out, uint8_t value);
+
 // Renders one response line's body (no response ending):
 // - headers off: prints `payload[0..payloadLen)` (the CAF1-reassembled
 //   ISO-TP payload, or the raw CAF0 bytes -- the caller decides which by

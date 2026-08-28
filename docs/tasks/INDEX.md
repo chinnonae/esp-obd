@@ -28,7 +28,7 @@ or completes.
 | `[ ]` | [T08 - Bluetooth ELM and UART debug](08-transports-and-debug.md) | T03, T06, T07 | Clean app transport and isolated `#DBG:` console |
 | `[ ]` | [T09 - CAN command families and monitoring](09-can-commands-and-monitoring.md) | T06, T07, T08 | Remaining in-scope ELM CAN commands |
 | `[ ]` | [T10 - Compatibility validation and release gate](10-validation-and-release-gate.md) | T09 | Scanner-app, simulator, and vehicle evidence |
-| `[ ]` | [T11 - Settings persistence commands](11-settings-persistence-commands.md) | T01, T03 | `AT@2`/`AT@3`/`ATM`/`ATFE`/`ATRD`/`ATSD` handlers and settings-store interface |
+| `[x]` | [T11 - Settings persistence commands](11-settings-persistence-commands.md) | T01, T03 | `AT@2`/`AT@3`/`ATM`/`ATFE`/`ATRD`/`ATSD` handlers and settings-store interface |
 
 ## Working rules
 
