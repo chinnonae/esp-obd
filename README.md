@@ -46,6 +46,19 @@ pio device monitor --baud 115200
 The preceding ELM/CAN implementation was saved in Git commit `f5c36ed`
 (`legacy: checkpoint ELM CAN adapter implementation`).
 
+## Testing
+
+Portable code has a fast, hardware-free test suite (no ESP32 board needed):
+
+```powershell
+pio test -e native_test
+```
+
+This does not require a separately installed gcc/g++ — it builds with the
+`zig` compiler already bundled in `.venv` (see
+[test/native_toolchain.py](test/native_toolchain.py)). See
+[test/README.md](test/README.md) for suite layout and shared fakes.
+
 ## Reimplementation plan
 
 The dependency-ordered task board is in [docs/tasks/INDEX.md](docs/tasks/INDEX.md).

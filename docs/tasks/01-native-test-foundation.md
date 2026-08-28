@@ -1,6 +1,6 @@
 # T01 - Native Test Foundation
 
-**Status:** Planned
+**Status:** Done (started 2026-08-28, completed 2026-08-28)
 
 ## Goal
 
@@ -38,3 +38,25 @@ Make fast desktop tests the default way to develop portable protocol logic.
 - Fake clock advances only when instructed.
 - Fake CAN port preserves frame order and records timeouts.
 - An intentionally failing assertion displays expected and actual bytes.
+
+## Notes
+
+- No separate host toolchain install was needed or added: `native_test` uses
+  the `zig cc`/`c++`/`ar` drivers already bundled via the `ziglang` pip
+  package in `.venv`, wired in through `test/native_toolchain.py` and thin
+  `test/native_tools/*.cmd` wrappers (the native platform's own builder
+  deletes any `CC`/`CXX` set directly and re-detects `gcc`/`g++` from `PATH`,
+  so the wrappers are what it finds). See [test/README.md](../../test/README.md).
+- `FakeCanPort::receive()` takes no timeout and never blocks, matching the
+  `ICanPort` contract decided in [ARCHITECTURE.md](../ARCHITECTURE.md): it
+  either returns a queued frame or reports none immediately. A caller
+  wanting timeout behavior computes its own deadline from `FakeClock` and
+  polls; the port itself has nothing to record.
+- `FakeCanFrame` intentionally duplicates the `CanFrame` shape from
+  `ARCHITECTURE.md` rather than defining it once here — T02 owns that type
+  and will point `fake_can_port.h` at it directly.
+
+Verified: `pio test -e native_test` (5/5 passing), `pio test -e native_test
+-f "unit/test_smoke"` (group filter), and `pio run -e ioxesp32` (ESP32
+target unaffected) all pass. An intentional wrong assertion was confirmed to
+print `Expected 6 Was 8` before being fixed.
