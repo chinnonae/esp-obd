@@ -72,6 +72,23 @@ HexRequestValidation validateHexRequestLine(const NormalizedLine& line,
   return result;
 }
 
+std::optional<uint32_t> parseFixedWidthHex(const char* text, size_t digitCount) {
+  size_t i = 0;
+  for (; i < digitCount; ++i) {
+    if (!isHexDigit(text[i])) {
+      return std::nullopt;
+    }
+  }
+  if (text[digitCount] != '\0') {
+    return std::nullopt;  // trailing garbage, or fewer digits than required
+  }
+  uint32_t value = 0;
+  for (i = 0; i < digitCount; ++i) {
+    value = (value << 4) | hexDigitValue(text[i]);
+  }
+  return value;
+}
+
 size_t decodeHexBytes(const char* hexDigits, uint8_t* out, size_t maxOut) {
   size_t written = 0;
   for (; hexDigits[0] != '\0' && hexDigits[1] != '\0' && written < maxOut; hexDigits += 2) {

@@ -53,8 +53,8 @@ TransportOutput ElmBluetoothSession::handleLineEvent(can::Milliseconds now,
 TransportOutput ElmBluetoothSession::onByte(can::Milliseconds now, uint8_t byte) {
   TransportOutput out;
 
-  if (app_.engine().session().monitorActive) {
-    app_.engine().session().monitorActive = false;
+  if (app_.monitorActive()) {
+    app_.stopMonitor();
     out += elm::kStoppedText;
     out += elm::responseEnding(app_.engine().session());
     out += '>';
@@ -79,6 +79,11 @@ TransportOutput ElmBluetoothSession::onByte(can::Milliseconds now, uint8_t byte)
 
 TransportOutput ElmBluetoothSession::poll(can::Milliseconds now) {
   TransportOutput out;
+
+  if (app_.monitorActive()) {
+    out += app_.pollMonitor(now).c_str();
+    return out;
+  }
 
   if (app_.diagnosticPending()) {
     if (app_.poll(now)) {

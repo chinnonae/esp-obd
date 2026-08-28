@@ -46,4 +46,9 @@ HexRequestValidation validateHexRequestLine(const NormalizedLine& line,
 // caller: decoding stays here so it isn't duplicated per caller.
 size_t decodeHexBytes(const char* hexDigits, uint8_t* out, size_t maxOut);
 
+// Parses exactly `digitCount` hex digits (1-8) followed by NUL -- e.g. an
+// ATSThh argument (2) or an ATSHhhhhhhhh argument (8). Shared by the T09
+// command families so each doesn't hand-roll its own hex/length checks.
+std::optional<uint32_t> parseFixedWidthHex(const char* text, size_t digitCount);
+
 }  // namespace esp_obd::elm

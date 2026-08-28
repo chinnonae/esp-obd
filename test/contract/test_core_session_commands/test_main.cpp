@@ -36,6 +36,20 @@ static void assertSessionIsDefault(const ElmSession& s) {
   TEST_ASSERT_FALSE(s.customHeaderId.has_value());
   TEST_ASSERT_FALSE(s.extendedAddressingEnabled);
   TEST_ASSERT_FALSE(s.monitorActive);
+
+  // T09 additions.
+  TEST_ASSERT_FALSE(s.protocolDiscoveredViaAutoSearch);
+  TEST_ASSERT_EQUAL_UINT8(1, s.canTimeoutMultiplier);
+  TEST_ASSERT_EQUAL_UINT8(0x18, s.priorityBits);
+  TEST_ASSERT_EQUAL(static_cast<int>(FlowControlMode::Automatic), static_cast<int>(s.flowControlMode));
+  TEST_ASSERT_FALSE(s.manualFlowControlId.has_value());
+  TEST_ASSERT_EQUAL_UINT8(0, s.manualFlowControlDataLen);
+  TEST_ASSERT_FALSE(s.requiredExtendedAddressByte.has_value());
+  TEST_ASSERT_EQUAL(static_cast<int>(MonitorMode::None), static_cast<int>(s.monitorMode));
+  TEST_ASSERT_EQUAL_UINT8(0, s.monitorAddressByte);
+  TEST_ASSERT_FALSE(s.silentMonitoringEnabled);
+  TEST_ASSERT_FALSE(s.variableDlcEnabled);
+  TEST_ASSERT_FALSE(s.lastAcceptedReceivedFrame.has_value());
 }
 
 void test_atz_resets_every_default_and_returns_identity() {

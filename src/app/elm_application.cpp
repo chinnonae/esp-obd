@@ -1,54 +1,32 @@
 #include "app/elm_application.h"
 
+#include <cstdio>
+
+#include "can/can_config.h"
 #include "can/obd_addresses.h"
 #include "elm/elm_errors.h"
 #include "elm/elm_formatter.h"
 #include "elm/elm_parser.h"
+#include "elm/protocol_mapping.h"
 
 namespace esp_obd::app {
 
-namespace {
-
-// Reconciles elm::ElmProtocol (T03: 5 values, includes "AutomaticSearch"
-// session state) with can::obd::ObdCanProtocol (T06: 4 wire configs, no
-// "automatic" member -- diagnostic/ can't depend on elm/). Left here
-// rather than as a permanent fixture: a future task may fold one into the
-// other once ATSP (T09) shows which shape it actually wants.
-std::optional<can::obd::ObdCanProtocol> toObdCanProtocol(elm::ElmProtocol protocol) {
-  switch (protocol) {
-    case elm::ElmProtocol::Iso15765_11bit_500k:
-      return can::obd::ObdCanProtocol::Iso15765_11bit_500k;
-    case elm::ElmProtocol::Iso15765_29bit_500k:
-      return can::obd::ObdCanProtocol::Iso15765_29bit_500k;
-    case elm::ElmProtocol::Iso15765_11bit_250k:
-      return can::obd::ObdCanProtocol::Iso15765_11bit_250k;
-    case elm::ElmProtocol::Iso15765_29bit_250k:
-      return can::obd::ObdCanProtocol::Iso15765_29bit_250k;
-    default:
-      return std::nullopt;
-  }
-}
-
-elm::ElmProtocol fromObdCanProtocol(can::obd::ObdCanProtocol protocol) {
-  switch (protocol) {
-    case can::obd::ObdCanProtocol::Iso15765_11bit_500k:
-      return elm::ElmProtocol::Iso15765_11bit_500k;
-    case can::obd::ObdCanProtocol::Iso15765_29bit_500k:
-      return elm::ElmProtocol::Iso15765_29bit_500k;
-    case can::obd::ObdCanProtocol::Iso15765_11bit_250k:
-      return elm::ElmProtocol::Iso15765_11bit_250k;
-    case can::obd::ObdCanProtocol::Iso15765_29bit_250k:
-    default:
-      return elm::ElmProtocol::Iso15765_29bit_250k;
-  }
-}
-
-}  // namespace
-
 elm::ElmReply ElmApplication::execute(can::Milliseconds now, const char* rawLine) {
+  bool wasMonitoring = engine_.session().monitorActive;
   elm::ElmReply reply = engine_.execute(rawLine);
+
   if (reply.kind == elm::ElmReplyKind::DiagnosticRequest) {
     startDiagnostic(now, reply);
+    return reply;
+  }
+  if (reply.kind == elm::ElmReplyKind::CanStatusRequest) {
+    return resolveCanStatusRequest();
+  }
+  if (reply.kind == elm::ElmReplyKind::SendRtrRequest) {
+    return resolveSendRtrRequest();
+  }
+  if (!wasMonitoring && engine_.session().monitorActive) {
+    syncMonitorCanMode();
   }
   return reply;
 }
@@ -67,21 +45,29 @@ void ElmApplication::startDiagnostic(can::Milliseconds now, const elm::ElmReply&
   request.receiveFilter = session.idFilter;
   request.extendedAddressingEnabled = session.extendedAddressingEnabled;
   request.transmitExtendedAddressByte = session.extendedAddressByte;
-  // T09 will add a distinct ATCERhh field; until then this reuses the
-  // single extended-address byte for both directions.
-  request.requiredExtendedAddressByte = session.extendedAddressByte;
-  request.sendAutomaticFlowControl = session.automaticFlowControlEnabled;
+  request.requiredExtendedAddressByte =
+      session.requiredExtendedAddressByte.value_or(session.extendedAddressByte);
+  // FCSM1/FCSM2 (manual modes) aren't fully wired to isotp/'s manual FC
+  // byte injection yet -- they just disable automatic FC, same as CFC0.
+  // See this task's Notes.
+  request.sendAutomaticFlowControl = session.flowControlMode == elm::FlowControlMode::Automatic
+                                          ? session.automaticFlowControlEnabled
+                                          : false;
   request.responseTimeoutMs = session.responseTimeoutMs;
 
   diagnosticPending_ = true;
 
-  auto fixedProtocol = toObdCanProtocol(session.protocol);
+  auto fixedProtocol = elm::toObdCanProtocol(session.protocol);
   if (!session.protocolConnected || !fixedProtocol.has_value()) {
     diagnosticTransport_.startAutoSearch(now, request);
   } else {
-    request.requestId =
-        session.customHeaderId.value_or(can::obd::functionalRequestId(*fixedProtocol));
-    request.requestIdIsExtendedCan = can::obd::isExtendedCan(*fixedProtocol);
+    if (session.customHeaderId.has_value()) {
+      request.requestId = *session.customHeaderId;
+      request.requestIdIsExtendedCan = *session.customHeaderId > can::kStandardIdMax;
+    } else {
+      request.requestId = can::obd::functionalRequestId(*fixedProtocol);
+      request.requestIdIsExtendedCan = can::obd::isExtendedCan(*fixedProtocol);
+    }
     diagnosticTransport_.start(now, request, *fixedProtocol);
   }
 
@@ -115,10 +101,16 @@ bool ElmApplication::poll(can::Milliseconds now) {
 elm::ElmReply ElmApplication::formatDiagnosticResult(const diagnostic::DiagnosticResult& result) {
   if (result.connectedProtocol.has_value()) {
     // Persist the auto-search outcome so later requests skip re-searching.
-    // T09's ATDPN will need to separately track "discovered via search"
-    // (for its A6..A9 vs 6..9 distinction) -- not modeled here yet.
-    engine_.session().protocol = fromObdCanProtocol(*result.connectedProtocol);
+    engine_.session().protocol = elm::fromObdCanProtocol(*result.connectedProtocol);
     engine_.session().protocolConnected = true;
+    engine_.session().protocolDiscoveredViaAutoSearch = true;
+  }
+
+  if (result.responderCount > 0) {
+    const diagnostic::Responder& last = result.responders[result.responderCount - 1];
+    if (last.rawFrameCount > 0) {
+      engine_.session().lastAcceptedReceivedFrame = last.rawFrames[last.rawFrameCount - 1];
+    }
   }
 
   const elm::ElmSession& baseSession = engine_.session();
@@ -143,7 +135,8 @@ elm::ElmReply ElmApplication::formatDiagnosticResult(const diagnostic::Diagnosti
 
   // Simplification: renders one line per responder using its first raw
   // frame for header/DLC display. A full multi-frame ATH1 (one line per
-  // raw CF, PCI-declared-length trimming under ATD0) is left to T09.
+  // raw CF, PCI-declared-length trimming under ATD0) is left for a later
+  // pass.
   elm::ElmReplyText body;
   for (size_t i = 0; i < result.responderCount; ++i) {
     const diagnostic::Responder& responder = result.responders[i];
@@ -168,6 +161,81 @@ elm::ElmReply ElmApplication::formatDiagnosticResult(const diagnostic::Diagnosti
   reply.text += elm::responseEnding(renderSession);
   reply.appendPrompt = true;
   return reply;
+}
+
+elm::ElmReply ElmApplication::resolveCanStatusRequest() {
+  can::CanStatus status = canPort_.status();
+  const char* bitrateText = status.configuredBitrate == can::Bitrate::Bitrate500k ? "500K" : "250K";
+  uint32_t tx = status.txErrorCounter > 0xFF ? 0xFF : status.txErrorCounter;
+  uint32_t rx = status.rxErrorCounter > 0xFF ? 0xFF : status.rxErrorCounter;
+  char buf[64];
+  std::snprintf(buf, sizeof(buf), "TXERR:%02X RXERR:%02X BUSOFF:%d RATE:%s", tx, rx,
+                status.busOff ? 1 : 0, bitrateText);
+  return elm::textReply(engine_.session(), buf);
+}
+
+elm::ElmReply ElmApplication::resolveSendRtrRequest() {
+  const elm::ElmSession& session = engine_.session();
+  uint32_t id = session.customHeaderId.value_or(session.requestId);
+  bool extended = id > can::kStandardIdMax;
+  auto frame = extended ? can::makeExtendedRemoteFrame(id, 0) : can::makeStandardRemoteFrame(id, 0);
+  if (!frame.has_value() || canPort_.send(*frame, session.responseTimeoutMs) != can::CanResult::Ok) {
+    return elm::textReply(session, elm::kCanErrorText);
+  }
+  return elm::textReply(session, elm::kOkText);
+}
+
+void ElmApplication::syncMonitorCanMode() {
+  const elm::ElmSession& session = engine_.session();
+  can::CanConfig config;
+  config.bitrate = can::Bitrate::Bitrate500k;
+  if (auto protocol = elm::toObdCanProtocol(session.protocol)) {
+    config.bitrate = can::obd::bitrateFor(*protocol);
+  }
+  bool wantListenOnly = session.monitorActive && session.silentMonitoringEnabled;
+  config.mode = wantListenOnly ? can::ControllerMode::ListenOnly : can::ControllerMode::Normal;
+  canPort_.configure(config);
+}
+
+elm::ElmReplyText ElmApplication::pollMonitor(can::Milliseconds now) {
+  (void)now;
+  elm::ElmReplyText out;
+  const elm::ElmSession& session = engine_.session();
+  if (!session.monitorActive) {
+    return out;
+  }
+
+  can::ReceiveResult rx = canPort_.receive();
+  if (!rx.hasFrame) {
+    return out;
+  }
+
+  bool matches = false;
+  switch (session.monitorMode) {
+    case elm::MonitorMode::All:
+      matches = true;
+      break;
+    case elm::MonitorMode::ReceivedAddress:
+    case elm::MonitorMode::TransmittedAddress:
+      matches = (rx.frame.id & 0xFF) == session.monitorAddressByte;
+      break;
+    default:
+      break;
+  }
+  if (!matches) {
+    return out;
+  }
+
+  out = elm::formatResponseBody(session, rx.frame, rx.frame.data.data(), rx.frame.dlc,
+                                 rx.frame.dlc);
+  out += elm::responseEnding(session);
+  return out;
+}
+
+void ElmApplication::stopMonitor() {
+  engine_.session().monitorActive = false;
+  engine_.session().monitorMode = elm::MonitorMode::None;
+  syncMonitorCanMode();
 }
 
 }  // namespace esp_obd::app

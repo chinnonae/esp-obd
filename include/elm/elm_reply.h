@@ -16,6 +16,8 @@ enum class ElmReplyKind {
   DiagnosticRequest,  // valid hex request; text holds the normalized
                       // payload hex (PCI/response-count nibble already
                       // stripped); no CAN transmitted yet -- T06 executes it
+  CanStatusRequest,   // ATCS: app/ formats the real reply from ICanPort::status()
+  SendRtrRequest,     // ATRTR: app/ builds and sends the RTR frame, then replies
 };
 
 struct ElmReply {
