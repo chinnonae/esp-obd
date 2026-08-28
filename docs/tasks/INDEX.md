@@ -23,7 +23,7 @@ or completes.
 | `[x]` | [T03 - ELM core and reply formatting](03-elm-core-and-formatting.md) | T01, T02 | Parser, session state, and exact ELM text without streams |
 | `[x]` | [T04 - ISO-TP receive state machine](04-isotp-receive.md) | T02 | Tested single- and multi-frame reception |
 | `[x]` | [T05 - ISO-TP transmit state machine](05-isotp-transmit.md) | T02 | Tested single- and multi-frame requests |
-| `[ ]` | [T06 - Diagnostic transactions](06-diagnostic-transactions.md) | T03, T04, T05 | Requests, responders, auto-search, and typed results |
+| `[x]` | [T06 - Diagnostic transactions](06-diagnostic-transactions.md) | T03, T04, T05 | Requests, responders, auto-search, and typed results |
 | `[ ]` | [T07 - ESP32 platform adapters](07-esp32-platform-adapters.md) | T02, T06, T11 | TWAI, clock, settings, and build integration |
 | `[ ]` | [T08 - Bluetooth ELM and UART debug](08-transports-and-debug.md) | T03, T06, T07 | Clean app transport and isolated `#DBG:` console |
 | `[ ]` | [T09 - CAN command families and monitoring](09-can-commands-and-monitoring.md) | T06, T07, T08 | Remaining in-scope ELM CAN commands |
