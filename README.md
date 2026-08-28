@@ -1,11 +1,17 @@
 # ESP-OBD
 
-A fresh ESP32 starting point for the future CAN OBD-II adapter.
+An ESP32 Bluetooth Classic ELM327-compatible adapter for **Classical CAN
+OBD-II**, reimplemented from a clean start (see
+[Reimplementation plan](#reimplementation-plan) below).
 
-The current firmware is deliberately minimal:
-
-- prints an identity banner and `Hello, world!` once on UART0 at 115200 baud;
-- blinks the status LED every 500 ms.
+The firmware presents Bluetooth Classic SPP as the ELM327 command channel
+(AT commands, diagnostic requests, monitor mode) and UART0 as a separate
+`#HELP`/`#STATUS`/`#DBG`/`#REBOOT` debug console. It is code-complete and
+covered by the native test suite, but has not yet been run against real
+hardware, a scanner app, or a vehicle -- see
+[T07](docs/tasks/07-esp32-platform-adapters.md)'s and
+[T10](docs/tasks/10-validation-and-release-gate.md)'s status before relying
+on it.
 
 ## Hardware and safety
 

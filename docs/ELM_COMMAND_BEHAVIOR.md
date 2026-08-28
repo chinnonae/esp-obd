@@ -244,7 +244,23 @@ When adding a test, use one of these labels in its name or comment:
   test before implementation.
 - **Unsupported**: must continue to return `?` until hardware or scope changes.
 
-The current code is only a partial implementation of this contract. In
-particular, it currently accepts and fakes `ATRV` / `ATIGN`, accepts some
-non-CAN protocol selections, and lacks multi-frame request transmission. Those
-behaviors must be changed to conform to this document.
+As of the T00-T09/T11 reimplementation (see [docs/tasks/INDEX.md](tasks/INDEX.md)),
+every command family in sections 2.1-2.4 is implemented and covered by native
+tests, including multi-frame request transmission and reception, and `ATRV`/
+`ATIGN`/non-CAN protocol selections correctly return `?` rather than being
+faked. A handful of narrower gaps remain, tracked in the relevant task files'
+own Notes rather than duplicated here:
+
+- Manual flow-control modes (`ATFCSM1`/`ATFCSM2`) and manual FC bytes
+  (`ATFCSH`/`ATFCSD`) are accepted and stored but not yet injected into an
+  outgoing Flow Control frame -- see [T09](tasks/09-can-commands-and-monitoring.md).
+- `ATCPhh`'s priority bits are stored but not yet applied to a constructed
+  29-bit request ID (T09).
+- `ATV0`/`ATV1` is stored but doesn't change wire format: frames are always
+  padded to 8 bytes (T04/T05, T09).
+- `ATBD` returns only the last accepted RX frame, not "last TX and accepted
+  RX" (T09).
+- T07's ESP32 platform adapters (TWAI, NVS) and T08's Bluetooth/UART
+  transports are code-complete and build-verified, but not yet exercised on
+  real hardware -- see [T07](tasks/07-esp32-platform-adapters.md)'s Blocker
+  section and [T10](tasks/10-validation-and-release-gate.md).
