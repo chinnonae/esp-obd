@@ -21,7 +21,7 @@ or completes.
 | `[x]` | [T01 - Native test foundation](01-native-test-foundation.md) | T00 | Fast desktop test command and reusable fakes |
 | `[x]` | [T02 - Portable CAN core](02-portable-can-core.md) | T01 | Hardware-free CAN types, filters, clock, and port interface |
 | `[x]` | [T03 - ELM core and reply formatting](03-elm-core-and-formatting.md) | T01, T02 | Parser, session state, and exact ELM text without streams |
-| `[ ]` | [T04 - ISO-TP receive state machine](04-isotp-receive.md) | T02 | Tested single- and multi-frame reception |
+| `[x]` | [T04 - ISO-TP receive state machine](04-isotp-receive.md) | T02 | Tested single- and multi-frame reception |
 | `[ ]` | [T05 - ISO-TP transmit state machine](05-isotp-transmit.md) | T02 | Tested single- and multi-frame requests |
 | `[ ]` | [T06 - Diagnostic transactions](06-diagnostic-transactions.md) | T03, T04, T05 | Requests, responders, auto-search, and typed results |
 | `[ ]` | [T07 - ESP32 platform adapters](07-esp32-platform-adapters.md) | T02, T06, T11 | TWAI, clock, settings, and build integration |
