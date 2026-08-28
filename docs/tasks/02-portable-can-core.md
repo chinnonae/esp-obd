@@ -1,6 +1,6 @@
 # T02 - Portable CAN Core
 
-**Status:** Planned
+**Status:** Done (started 2026-08-28, completed 2026-08-28)
 
 ## Goal
 
@@ -36,3 +36,30 @@ the ESP32 TWAI adapter.
 - Frame creation boundary values: `7FF`, `800`, `1FFFFFFF`, `20000000`.
 - DLC boundary values: 0, 8, and 9.
 - Software filter truth table for mask/filter/receive-address combinations.
+
+## Notes
+
+- Delivered under `include/can/`: `can_frame.h` (`CanFrame`, id/dlc
+  validation, `makeStandardFrame`/`makeExtendedFrame`/`make*RemoteFrame`),
+  `can_config.h` (`Bitrate`, `ControllerMode`, `CanConfig`), `i_clock.h`
+  (`Milliseconds`, `IClock`), `can_result.h` (`CanResult`, `ReceiveResult`,
+  `CanStatus`), `i_can_port.h` (`ICanPort`), `can_filter.h` (`CanFilter`,
+  `matchesFilter`, `exactIdFilter`), `obd_addresses.h` (default 11-/29-bit
+  request/response addresses). Implementation in `src/can/can_frame.cpp`.
+- `ICanPort::receive()` takes no timeout and never blocks, per the contract
+  decided in [ARCHITECTURE.md](../ARCHITECTURE.md).
+- `test/support/fake_can_port.h` now implements `ICanPort` directly (no more
+  ad hoc `FakeCanFrame`), and `test/support/can_frame_builder.h` builds real
+  `CanFrame`s via the factories, asserting on an invalid result since the
+  builder is for valid test fixtures only.
+- `platformio.ini`'s `native_test` env now has `test_build_src = true` with
+  `build_src_filter = -<*> +<can/>`; later layers (isotp/, diagnostic/,
+  elm/, app/) extend this filter as their tasks land. `src/main.cpp` and
+  `platform/esp32/` must never be added to it.
+- New suite `test/unit/test_can_core/`: frame id/dlc boundaries, remote
+  frames, filter truth table (mask/value, exact-id, default OBD ranges),
+  and `FakeCanPort` tx-order/non-blocking-rx behavior.
+
+Verified: `pio test -e native_test` (13/13 passing across `test_smoke` and
+`test_can_core`), and `pio run -e ioxesp32` still builds with `can/` in the
+firmware image.

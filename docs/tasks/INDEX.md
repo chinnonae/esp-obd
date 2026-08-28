@@ -19,7 +19,7 @@ or completes.
 |---|---|---|---|
 | `[x]` | [T00 - Project baseline and decisions](00-project-baseline.md) | - | Stable scope, terminology, and safety policy |
 | `[x]` | [T01 - Native test foundation](01-native-test-foundation.md) | T00 | Fast desktop test command and reusable fakes |
-| `[ ]` | [T02 - Portable CAN core](02-portable-can-core.md) | T01 | Hardware-free CAN types, filters, clock, and port interface |
+| `[x]` | [T02 - Portable CAN core](02-portable-can-core.md) | T01 | Hardware-free CAN types, filters, clock, and port interface |
 | `[ ]` | [T03 - ELM core and reply formatting](03-elm-core-and-formatting.md) | T01, T02 | Parser, session state, and exact ELM text without streams |
 | `[ ]` | [T04 - ISO-TP receive state machine](04-isotp-receive.md) | T02 | Tested single- and multi-frame reception |
 | `[ ]` | [T05 - ISO-TP transmit state machine](05-isotp-transmit.md) | T02 | Tested single- and multi-frame requests |

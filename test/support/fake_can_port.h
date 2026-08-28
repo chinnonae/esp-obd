@@ -1,48 +1,49 @@
 #pragma once
 
-#include <array>
-#include <cstdint>
 #include <deque>
 #include <vector>
 
-// Test-only CAN frame shape, matching the `CanFrame` type planned in
-// docs/ARCHITECTURE.md so T02 can adopt this file directly instead of
-// redesigning it. Do not add a field here that isn't already in that struct.
-struct FakeCanFrame {
-  uint32_t id = 0;
-  bool extended = false;
-  bool remoteRequest = false;
-  uint8_t dlc = 0;
-  std::array<uint8_t, 8> data{};
+#include "can/can_config.h"
+#include "can/can_frame.h"
+#include "can/can_result.h"
+#include "can/i_can_port.h"
 
-  bool operator==(const FakeCanFrame& other) const {
-    return id == other.id && extended == other.extended &&
-           remoteRequest == other.remoteRequest && dlc == other.dlc &&
-           data == other.data;
-  }
-};
-
-// Test double standing in for the eventual `ICanPort` (T02). Captures every
-// sent frame in order and serves queued frames to a receiver. `receive()`
-// never blocks and never sleeps: it either returns the next queued frame or
-// reports none, matching the non-blocking `ICanPort::receive()` contract in
-// docs/ARCHITECTURE.md.
-class FakeCanPort {
+// Test double implementing the real `ICanPort` (T02). Captures every sent
+// frame in order and serves queued frames to a receiver. `receive()` never
+// blocks and never sleeps, matching the `ICanPort` contract.
+class FakeCanPort : public esp_obd::can::ICanPort {
  public:
-  void send(const FakeCanFrame& frame) { txCaptured_.push_back(frame); }
-
-  void queueRx(const FakeCanFrame& frame) { rxQueue_.push_back(frame); }
-
-  bool receive(FakeCanFrame& outFrame) {
-    if (rxQueue_.empty()) {
-      return false;
-    }
-    outFrame = rxQueue_.front();
-    rxQueue_.pop_front();
+  bool configure(const esp_obd::can::CanConfig& config) override {
+    lastConfig_ = config;
+    configured_ = true;
     return true;
   }
 
-  const std::vector<FakeCanFrame>& transmitted() const { return txCaptured_; }
+  esp_obd::can::CanResult send(const esp_obd::can::CanFrame& frame,
+                                esp_obd::can::Milliseconds /*timeout*/) override {
+    txCaptured_.push_back(frame);
+    return nextSendResult_;
+  }
+
+  esp_obd::can::ReceiveResult receive() override {
+    if (rxQueue_.empty()) {
+      return esp_obd::can::ReceiveResult{/*hasFrame=*/false, {}};
+    }
+    esp_obd::can::CanFrame frame = rxQueue_.front();
+    rxQueue_.pop_front();
+    return esp_obd::can::ReceiveResult{/*hasFrame=*/true, frame};
+  }
+
+  esp_obd::can::CanStatus status() const override { return status_; }
+
+  // Test-only controls, not part of ICanPort.
+  void queueRx(const esp_obd::can::CanFrame& frame) { rxQueue_.push_back(frame); }
+  void setNextSendResult(esp_obd::can::CanResult result) { nextSendResult_ = result; }
+  void setStatus(const esp_obd::can::CanStatus& status) { status_ = status; }
+
+  const std::vector<esp_obd::can::CanFrame>& transmitted() const { return txCaptured_; }
+  bool configured() const { return configured_; }
+  const esp_obd::can::CanConfig& lastConfig() const { return lastConfig_; }
 
   void reset() {
     txCaptured_.clear();
@@ -50,6 +51,10 @@ class FakeCanPort {
   }
 
  private:
-  std::vector<FakeCanFrame> txCaptured_;
-  std::deque<FakeCanFrame> rxQueue_;
+  std::vector<esp_obd::can::CanFrame> txCaptured_;
+  std::deque<esp_obd::can::CanFrame> rxQueue_;
+  esp_obd::can::CanResult nextSendResult_ = esp_obd::can::CanResult::Ok;
+  esp_obd::can::CanStatus status_{};
+  esp_obd::can::CanConfig lastConfig_{};
+  bool configured_ = false;
 };
