@@ -1,6 +1,6 @@
 # T05 - ISO-TP Transmit State Machine
 
-**Status:** Planned
+**Status:** Done (started 2026-08-28, completed 2026-08-28)
 
 ## Goal
 
@@ -35,3 +35,33 @@ requests that the legacy implementation could not transmit.
 - Single-frame 1-byte and 7-byte payloads.
 - Multi-frame payloads spanning sequence wrap and multiple FC blocks.
 - FC Wait, Overflow, missing FC, malformed FC, STmin boundaries, and bus error.
+
+## Notes
+
+- `kMaxPayloadBytes` moved from `isotp_receive.h` into the shared
+  `isotp_pci.h` so RX and TX reference one definition. Also added there:
+  `stMinToMilliseconds` (0x00-0x7F direct; 0xF1-0xF9 sub-millisecond values
+  round up to 1ms, since this project's clock resolution is milliseconds;
+  reserved values fail safe to 127ms).
+- `IsoTpTransmitter` ([include/isotp/isotp_transmit.h](../../include/isotp/isotp_transmit.h))
+  holds a non-owning `const uint8_t*`/length into the caller's buffer per
+  Step 1 ("caller-owned immutable request buffer") -- unlike the RX side, TX
+  already has the whole payload upfront, so there's nothing to reassemble
+  or copy.
+- `CAF0` (raw mode) deliberately has no code here: per the task's own
+  framing ("never interprets ISO-TP"), the diagnostic layer (T06) should
+  call `can::makeStandardFrame`/`makeExtendedFrame` directly with the
+  caller's bytes for that case -- T02's factories already do exactly "send
+  exactly caller-provided bytes," so nothing new was needed.
+- Flow Control block-size/STmin come from the last received FC, not from
+  `TxConfig`: ISO-TP has the *receiver* dictate pacing to the sender.
+  `TxConfig` only carries our own id/addressing and timeouts.
+- New suite `test/unit/test_isotp_transmit/`: exact single-frame encoding
+  (including the contract's `010C` worked example), 1- and 7-byte
+  boundaries, FF+CF for an 8-byte payload, sequence wrap over 16 CFs, FC
+  block-size re-arm, FC Wait/Overflow/missing/malformed, STmin pacing
+  advanced entirely through `poll(now)` (no real sleeping), a bus-error
+  send failure, and extended addressing plus a 29-bit CAN id.
+
+Verified: `pio test -e native_test` (75/75 passing across seven suites) and
+`pio run -e ioxesp32` still builds.

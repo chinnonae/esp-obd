@@ -30,13 +30,9 @@ enum class RxState {
   ProtocolError,
 };
 
-// Bounded payload/frame-count limits. 255 bytes comfortably covers real
-// OBD-II/UDS responses (VIN, DTC dumps, calibration IDs) while staying well
-// under the ISO-TP theoretical max of 4095, so "declared length larger than
-// the limit" is actually reachable and testable. 40 raw frames covers
-// 255 bytes worth of 7-byte Consecutive Frames (37) plus the First Frame
-// and slack.
-inline constexpr size_t kMaxPayloadBytes = 255;
+// kMaxPayloadBytes is shared with the TX side; see isotp_pci.h. 40 raw
+// frames covers 255 bytes worth of 7-byte Consecutive Frames (37) plus the
+// First Frame and slack.
 inline constexpr size_t kMaxRawFrames = 40;
 
 struct RxConfig {

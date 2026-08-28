@@ -57,4 +57,14 @@ size_t buildFlowControlPci(uint8_t* out, FlowStatus status, uint8_t blockSize, u
   return 3;
 }
 
+uint16_t stMinToMilliseconds(uint8_t stMin) {
+  if (stMin <= 0x7F) {
+    return stMin;
+  }
+  if (stMin >= 0xF1 && stMin <= 0xF9) {
+    return 1;
+  }
+  return 127;
+}
+
 }  // namespace esp_obd::isotp
