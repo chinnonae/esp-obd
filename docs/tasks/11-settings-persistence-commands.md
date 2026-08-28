@@ -16,7 +16,8 @@ takes effect — entirely as portable code, with no ESP32 dependency.
   this same interface against ESP32 NVS (flash already built into the chip;
   no additional hardware).
 - Command handlers for `AT@2`, `AT@3hhhhhhhhhhhh`, `ATM0`/`ATM1`, `ATFE`,
-  `ATRD`, `ATSDhh`.
+  `ATRD`, `ATSDhh`. Not `AT@1`: that's a fixed, stateless string handled by
+  [T03](03-elm-core-and-formatting.md) alongside `ATI`.
 - The exact persisted-field list: the 12-hex-digit device identifier, one
   saved data byte, and the `M0`/`M1` persistence-enabled flag itself.
 - Validation rules: reject malformed input without touching stored state;

@@ -14,6 +14,10 @@ struct CanFilter {
   uint32_t filterValue = 0;
 };
 
+constexpr bool operator==(const CanFilter& a, const CanFilter& b) {
+  return a.mask == b.mask && a.filterValue == b.filterValue;
+}
+
 constexpr bool matchesFilter(uint32_t id, const CanFilter& filter) {
   return (id & filter.mask) == (filter.filterValue & filter.mask);
 }

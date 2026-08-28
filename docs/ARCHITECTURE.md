@@ -96,7 +96,8 @@ class IClock {
 
 ```cpp
 struct ElmReply {
-  ReplyKind kind;              // Text, StartMonitor, StopMonitor, NoReply
+  ReplyKind kind;              // Text, NoReply, DiagnosticRequest (T03);
+                               // StartMonitor, StopMonitor (T09)
   FixedString<...> text;
   bool appendPrompt;
 };
