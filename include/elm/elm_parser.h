@@ -40,4 +40,10 @@ struct HexRequestValidation {
 HexRequestValidation validateHexRequestLine(const NormalizedLine& line,
                                              bool automaticFormattingEnabled);
 
+// Decodes an even-length hex-digit string (e.g. HexRequestValidation's
+// payloadHex) into bytes, writing at most `maxOut` bytes. The diagnostic
+// layer (whoever executes a DiagnosticRequest-kind ElmReply) is the one
+// caller: decoding stays here so it isn't duplicated per caller.
+size_t decodeHexBytes(const char* hexDigits, uint8_t* out, size_t maxOut);
+
 }  // namespace esp_obd::elm

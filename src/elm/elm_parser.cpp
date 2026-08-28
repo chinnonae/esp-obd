@@ -72,4 +72,16 @@ HexRequestValidation validateHexRequestLine(const NormalizedLine& line,
   return result;
 }
 
+size_t decodeHexBytes(const char* hexDigits, uint8_t* out, size_t maxOut) {
+  size_t written = 0;
+  for (; hexDigits[0] != '\0' && hexDigits[1] != '\0' && written < maxOut; hexDigits += 2) {
+    if (!isHexDigit(hexDigits[0]) || !isHexDigit(hexDigits[1])) {
+      break;
+    }
+    out[written++] =
+        static_cast<uint8_t>((hexDigitValue(hexDigits[0]) << 4) | hexDigitValue(hexDigits[1]));
+  }
+  return written;
+}
+
 }  // namespace esp_obd::elm
