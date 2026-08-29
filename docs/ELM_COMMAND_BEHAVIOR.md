@@ -142,6 +142,7 @@ return `?`. They must not be accepted and later fail on the first request.
 | Syntax | Required behaviour | Unit-test assertions |
 |---|---|---|
 | `ATSHhhh` | Set an 11-bit transmit CAN ID. | `OK`; reject values above `7FF`; next TX uses this standard ID. |
+| `ATSHhhhhhh` | Set a 29-bit transmit CAN ID from its low 3 bytes, prepending the standard `18` priority byte (`0x18hhhhhh`). Only valid while a 29-bit protocol is selected. | **Target** (see [T12](tasks/12-atsh-6digit-header.md)): `OK` under `ATSP7`/`ATSP9`; `?` with no state change under an 11-bit protocol; next TX has extended-ID flag. |
 | `ATSHhhhhhhhh` | Set a 29-bit transmit CAN ID. | `OK`; reject values above `1FFFFFFF`; next TX has extended-ID flag. |
 | `ATCPhh` | Set the five priority bits used with a 29-bit header. | `OK`; changing priority changes only the applicable ID bits. |
 | `ATCRA` / `ATAR` | Clear explicit receive address and CAN mask/filter. | `OK`; default OBD response range applies. |
@@ -260,6 +261,11 @@ own Notes rather than duplicated here:
   padded to 8 bytes (T04/T05, T09).
 - `ATBD` returns only the last accepted RX frame, not "last TX and accepted
   RX" (T09).
+- `ATSH` does not yet accept the 6-hex-digit 29-bit shorthand
+  (`ATSHhhhhhh` -> `0x18hhhhhh`) that scanner apps use to retarget UDS
+  requests at a specific ECU; only the 3-digit and 8-digit forms are
+  implemented today. Found via field-log comparison against a genuine
+  adapter on 2026-08-29 -- see [T12](tasks/12-atsh-6digit-header.md).
 - T07's ESP32 platform adapters (TWAI, NVS) and T08's Bluetooth/UART
   transports were exercised against a real board, a scanner app, and a
   live vehicle on 2026-08-28 (multi-ECU `0100`, a complete multi-frame VIN
