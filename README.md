@@ -32,6 +32,20 @@ This board and firmware do **not** support J1850, ISO 9141/KWP electrical
 interfaces, battery-voltage measurement, or ignition sensing — there is no
 wiring for any of them. Any document or reply claiming otherwise is wrong.
 
+### Board source
+
+This project targets the "ESP-OBD2" board sold by Artron Shop:
+[product page](https://www.artronshop.co.th/product/733/esp-obd2-%E0%B8%9A%E0%B8%AD%E0%B8%A3%E0%B9%8C%E0%B8%94-esp32-%E0%B9%80%E0%B8%8A%E0%B8%B7%E0%B9%88%E0%B8%AD%E0%B8%A1%E0%B8%95%E0%B9%88%E0%B8%AD-obd2-can-bus).
+The vendor also publishes circuit-level references:
+
+- [Schematic (PDF)](https://dl.artronshop.co.th/ESP-OBD2/Schematic.pdf)
+- [Board dimensions (PDF)](https://dl.artronshop.co.th/ESP-OBD2/Dimension.pdf)
+
+These are third-party documents, not maintained by this repository; the pin
+assignments above (GPIO 26/27 for CAN, GPIO 5 for the status LED) are the
+values this firmware actually uses and take precedence over anything in the
+vendor files if they ever disagree.
+
 > [!WARNING]
 > This adapter can transmit diagnostic traffic, including services that can
 > write to or reconfigure an ECU. There is no firmware-level whitelist or
