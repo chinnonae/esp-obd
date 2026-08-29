@@ -165,6 +165,30 @@ void test_atsh_sets_standard_and_extended_header_and_rejects_out_of_range() {
   TEST_ASSERT_EQUAL_STRING("?\r\r", app.execute(0, "ATSH20000000").text.c_str());  // > 0x1FFFFFFF
 }
 
+void test_atsh_accepts_6digit_shorthand_under_29bit_protocol() {
+  FakeCanPort port;
+  InMemorySettingsStore store;
+  app::ElmApplication app(port, store);
+
+  app.execute(0, "ATSP7");  // ISO 15765-4, 29-bit, 500k
+  TEST_ASSERT_EQUAL_STRING("OK\r\r", app.execute(0, "ATSHDA11F1").text.c_str());
+  TEST_ASSERT_EQUAL_UINT32(0x18DA11F1, *app.engine().session().customHeaderId);
+
+  TEST_ASSERT_EQUAL_STRING("OK\r\r", app.execute(0, "ATSHDBEFF1").text.c_str());
+  TEST_ASSERT_EQUAL_UINT32(0x18DBEFF1, *app.engine().session().customHeaderId);
+}
+
+void test_atsh_rejects_6digit_shorthand_under_11bit_protocol() {
+  FakeCanPort port;
+  InMemorySettingsStore store;
+  app::ElmApplication app(port, store);
+
+  app.execute(0, "ATSP6");  // ISO 15765-4, 11-bit, 500k
+  ElmSession before = app.engine().session();
+  TEST_ASSERT_EQUAL_STRING("?\r\r", app.execute(0, "ATSHDA11F1").text.c_str());
+  TEST_ASSERT_TRUE(before == app.engine().session());
+}
+
 void test_atcp_sets_priority_bits() {
   FakeCanPort port;
   InMemorySettingsStore store;
@@ -408,6 +432,8 @@ int main(int argc, char** argv) {
   RUN_TEST(test_atctm_sets_timeout_multiplier);
   RUN_TEST(test_atpc_disconnects_and_leaves_monitor_mode);
   RUN_TEST(test_atsh_sets_standard_and_extended_header_and_rejects_out_of_range);
+  RUN_TEST(test_atsh_accepts_6digit_shorthand_under_29bit_protocol);
+  RUN_TEST(test_atsh_rejects_6digit_shorthand_under_11bit_protocol);
   RUN_TEST(test_atcp_sets_priority_bits);
   RUN_TEST(test_atcra_and_atar_clear_receive_address_and_filter);
   RUN_TEST(test_atcra_sets_exact_receive_address);

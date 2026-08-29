@@ -1,6 +1,6 @@
 # T12 - ATSH 6-Hex-Digit Header Form
 
-**Status:** Planned
+**Status:** Done (started 2026-08-29, completed 2026-08-29)
 
 ## Goal
 
@@ -110,7 +110,17 @@ unsupported list.
   `29.08.2026 08:26:35` (ESP-OBD) and `29.08.2026 08:28:48` (genuine
   adapter, device name `OBDII`), same phone and Honda/Acura Hybrids profile,
   captured back-to-back for direct comparison.
+- Implemented as a new `parseShorthand29BitHeader` helper alongside the
+  existing `parseCanIdArgument` in
+  [at_commands_addressing.cpp](../../src/elm/at_commands_addressing.cpp);
+  the `SH` branch tries the 3/8-digit parser first, then falls back to the
+  6-digit shorthand so existing behavior is untouched.
 - Not yet confirmed against real hardware/vehicle -- this task was opened
-  from log analysis alone. Validate with a scanner app and a real 29-bit
-  vehicle bus before closing, per [T10](10-validation-and-release-gate.md)'s
-  standing requirement for scanner-app evidence.
+  from log analysis alone and closed on native-test/build evidence only.
+  Validate with Car Scanner and a real 29-bit vehicle bus before relying on
+  it in the field, per [T10](10-validation-and-release-gate.md)'s standing
+  requirement for scanner-app evidence.
+
+Verified: `pio test -e native_test` (160/160 passing, up from 158) and
+`pio run -e ioxesp32` still builds (85.8% flash, up slightly from T11's
+prior figure).

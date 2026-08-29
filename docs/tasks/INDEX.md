@@ -29,7 +29,7 @@ or completes.
 | `[x]` | [T09 - CAN command families and monitoring](09-can-commands-and-monitoring.md) | T06, T07, T08 | Remaining in-scope ELM CAN commands |
 | `[!]` | [T10 - Compatibility validation and release gate](10-validation-and-release-gate.md) | T09 | Scanner-app, simulator, and vehicle evidence |
 | `[x]` | [T11 - Settings persistence commands](11-settings-persistence-commands.md) | T01, T03 | `AT@2`/`AT@3`/`ATM`/`ATFE`/`ATRD`/`ATSD` handlers and settings-store interface |
-| `[ ]` | [T12 - ATSH 6-hex-digit header form](12-atsh-6digit-header.md) | T09 | `ATSH` accepts the 6-digit 29-bit shorthand scanner apps rely on to retarget ECUs |
+| `[x]` | [T12 - ATSH 6-hex-digit header form](12-atsh-6digit-header.md) | T09 | `ATSH` accepts the 6-digit 29-bit shorthand scanner apps rely on to retarget ECUs |
 
 ## Working rules
 

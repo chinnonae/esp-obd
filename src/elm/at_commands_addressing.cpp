@@ -13,6 +13,11 @@ namespace {
 
 bool eq(const char* a, const char* b) { return std::strcmp(a, b) == 0; }
 
+bool isElmProtocol29Bit(ElmProtocol protocol) {
+  return protocol == ElmProtocol::Iso15765_29bit_500k ||
+         protocol == ElmProtocol::Iso15765_29bit_250k;
+}
+
 // A CAN id argument is either exactly 3 hex digits (11-bit, <= 0x7FF) or
 // exactly 8 hex digits (29-bit, <= 0x1FFFFFFF). Shared by ATSH and ATFCSH.
 std::optional<uint32_t> parseCanIdArgument(const char* text) {
@@ -30,11 +35,24 @@ std::optional<uint32_t> parseCanIdArgument(const char* text) {
   return std::nullopt;
 }
 
+// ATSH-only: some scanner apps address a 29-bit bus with the 6-hex-digit
+// shorthand for the low 3 bytes of the 29-bit id (e.g. "DA11F1"), relying on
+// the adapter to prepend the standard `18` priority byte -> 0x18DA11F1. Only
+// meaningful once a 29-bit protocol is selected; a 3-byte value is always
+// <= 0x1FFFFFFF once OR'd with 0x18000000, so no extra range check is needed.
+std::optional<uint32_t> parseShorthand29BitHeader(const char* text, ElmProtocol protocol) {
+  if (std::strlen(text) != 6 || !isElmProtocol29Bit(protocol)) return std::nullopt;
+  auto value = parseFixedWidthHex(text, 6);
+  if (!value.has_value()) return std::nullopt;
+  return 0x18000000u | *value;
+}
+
 }  // namespace
 
 std::optional<ElmReply> dispatchAddressingCommand(ElmSession& session, const char* r) {
   if (std::strncmp(r, "SH", 2) == 0) {
     auto id = parseCanIdArgument(r + 2);
+    if (!id.has_value()) id = parseShorthand29BitHeader(r + 2, session.protocol);
     if (!id.has_value()) return std::nullopt;
     session.customHeaderId = *id;
     return textReply(session, kOkText);
