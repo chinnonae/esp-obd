@@ -65,11 +65,16 @@ strictly separate UART0 `#DBG:` development console.
   support it (a Single Frame request/response typically completes
   synchronously within `execute()`; anything needing more ticks is picked
   up by the transport's own `poll(now)`). `formatDiagnosticResult()`
-  renders one line per responder (forcing headers on when more than one
-  answers, per contract section 1.4) using each responder's first raw
-  frame; a full multi-frame `ATH1` (one line per raw CF, `ATD0`
-  PCI-length trimming) is left for T09. A successful auto-search is
-  persisted into `session.protocol`/`protocolConnected` here (needed so a
+  renders one line per responder in `CAF1` mode (forcing headers on when
+  more than one answers, per contract section 1.4), and in `ATH1` mode one
+  line per *raw frame* (First Frame + each Consecutive Frame), each
+  trimmed for CAN-level padding under `ATD0` -- originally shipped
+  showing only each responder's first raw frame, which real-hardware
+  testing against a scanner app caught truncating a multi-frame VIN read
+  to ~3-6 characters; fixed post-T09, see
+  [T07](07-esp32-platform-adapters.md)'s Hardware validation update.
+  A successful auto-search is persisted into
+  `session.protocol`/`protocolConnected` here (needed so a
   second request doesn't re-search every time); T09's `ATDPN` will need to
   separately track "discovered via search" for its `A6..A9` vs `6..9`
   distinction, not modeled yet.

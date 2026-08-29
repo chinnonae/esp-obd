@@ -1,7 +1,9 @@
 # T07 - ESP32 Platform Adapters
 
-**Status:** Blocked (started 2026-08-28) -- code complete and building; needs
-a physical bench to verify TWAI/NVS behavior. See **Blocker** below.
+**Status:** Blocked (started 2026-08-28) -- code complete; basic hardware
+operation confirmed on a real board and vehicle 2026-08-28 (see **Hardware
+validation update**), but the formal bench checklist (explicit bitrate
+switch, listen-only ack-suppression) is still not done. See **Blocker**.
 
 ## Goal
 
@@ -47,18 +49,63 @@ or lifecycle rules spread through the program.
 - Bench NVS test: a value written through `Esp32SettingsStore` survives a
   power cycle. Native fake-store behavior is covered in T11, not here.
 
+## Hardware validation update (2026-08-28)
+
+A real ESP32 board (`ioxesp32`, USB-serial via a Silicon Labs CP210x
+bridge) was connected and flashed this session, with a phone scanner app
+against a live vehicle. This is genuine evidence, not a bench checklist
+substitute -- see what's still missing below.
+
+Confirmed working:
+- TWAI at 500 kbit/s talking to a real vehicle: a functional (`0100`)
+  broadcast got responses from **six distinct ECUs**, and later requests
+  (Mode 01 PIDs, VIN via Mode 09) returned real, correctly-decoded vehicle
+  data -- including a complete 17-character VIN across a First Frame + 2
+  Consecutive Frames.
+- Bluetooth Classic SPP: paired and exchanged a full real ELM327
+  conversation (`ATZ`, `ATE0`, `ATSP7`, `ATH1`, Mode 01/09 requests) with a
+  car-scanner app.
+- `Esp32SettingsStore`/NVS: no longer crashes or silently fails (see the
+  two bugs fixed below); persistence itself (write survives a reboot)
+  wasn't separately exercised this session.
+
+Two real bugs were found and fixed only because of this hardware run (see
+commits from 2026-08-28):
+1. `Esp32BluetoothTransport::begin()` called `setPin()` before `begin()`;
+   `BluetoothSerial::setPin()` requires the stack already started
+   (confirmed via the exact log line: `BT is not initialized. Call
+   begin() first`). Fixed by swapping the order.
+2. `Esp32SettingsStore` read NVS from its constructor, but it's a
+   file-scope global -- its constructor runs during C++ static
+   initialization, before `setup()` ever calls `nvs_flash_init()`
+   (confirmed via `nvs_open failed: NOT_INITIALIZED`). Fixed by moving
+   the NVS read into an explicit `load()`, and restructuring `main.cpp`
+   to construct `ElmApplication`/`Esp32BluetoothTransport`/
+   `Esp32UartDebugSink` inside `setup()`, after `nvs_flash_init()` +
+   `load()`, instead of as file-scope globals.
+
+A third, non-hardware-specific bug was also caught this way: `ATH1`
+(headers on) only ever rendered a responder's *first* raw frame, so a
+multi-frame VIN response was truncated to ~3-6 characters in the scanner
+app. Fixed in `ElmApplication::formatDiagnosticResult()` to walk every raw
+frame per responder (First Frame + each Consecutive Frame), each correctly
+trimmed for CAN-level padding under `ATD0`.
+
 ## Blocker
 
-This session has no physical ESP32 board or CAN bench attached, so the two
-genuinely hardware-dependent acceptance criteria are unverified:
+Still not done, and must not be claimed as done:
 
-- "The target build initializes and changes 250/500 kbit/s correctly."
+- "The target build initializes and changes 250/500 kbit/s correctly" --
+  only 500 kbit/s was exercised (against a real vehicle); switching to
+  250 kbit/s specifically was not tested.
 - "A benchmark smoke test demonstrates normal and listen-only controller
-  modes," and the Bench CAN / Bench NVS tests above.
+  modes" -- listen-only (`ATCSM1`) was not exercised against real hardware;
+  only normal mode was used.
+- The Bench NVS test (a value survives a power cycle) -- not separately
+  checked.
 
-Everything checkable without hardware is done and verified (see Notes).
-Do not mark this task `[x]` until someone runs the bench checklist above
-on real hardware; record the result here when that happens.
+Do not mark this task `[x]` until someone runs the remaining bench
+checklist items above; record the dated result here when that happens.
 
 ## Notes
 

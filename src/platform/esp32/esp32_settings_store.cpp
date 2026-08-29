@@ -15,8 +15,21 @@ constexpr const char* kSavedByteKey = "saved_byte";
 }  // namespace
 
 Esp32SettingsStore::Esp32SettingsStore() {
+  // No NVS access here -- see the header comment. Just the in-memory
+  // default until load() runs.
+  std::strncpy(deviceId_, build::kDefaultDeviceId, sizeof(deviceId_) - 1);
+  deviceId_[sizeof(deviceId_) - 1] = '\0';
+  savedDataByte_ = 0;
+}
+
+void Esp32SettingsStore::load() {
   Preferences prefs;
-  prefs.begin(kNamespace, /*readOnly=*/true);
+  // Read-write, not read-only: nvs_open() auto-creates a nonexistent
+  // namespace in read-write mode. Read-only would fail with NOT_FOUND on
+  // a never-written device (harmless -- getString/getUChar below fall
+  // back to their defaults regardless -- but a needless warning log on
+  // every first boot).
+  prefs.begin(kNamespace, /*readOnly=*/false);
   String stored = prefs.getString(kDeviceIdKey, build::kDefaultDeviceId);
   std::strncpy(deviceId_, stored.c_str(), sizeof(deviceId_) - 1);
   deviceId_[sizeof(deviceId_) - 1] = '\0';

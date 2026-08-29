@@ -1,5 +1,6 @@
 #include "app/elm_application.h"
 
+#include <algorithm>
 #include <cstdio>
 
 #include "can/can_config.h"
@@ -133,26 +134,80 @@ elm::ElmReply ElmApplication::formatDiagnosticResult(const diagnostic::Diagnosti
     renderSession.headersEnabled = true;
   }
 
-  // Simplification: renders one line per responder using its first raw
-  // frame for header/DLC display. A full multi-frame ATH1 (one line per
-  // raw CF, PCI-declared-length trimming under ATD0) is left for a later
-  // pass.
+  // Headers off: one line per responder, the reassembled payload (already
+  // correct for multi-frame -- IsoTpReceiver hands back the full payload
+  // regardless of frame count). Headers on: one line per *raw frame*
+  // (contract: "A First Frame and each CF are separate lines"), each
+  // trimmed to drop CAN-level padding under ATD0. Confirmed against a
+  // real scanner app: showing only the first raw frame per responder (the
+  // previous version of this code) truncated a multi-frame VIN read to
+  // just its first ~3-6 characters.
   elm::ElmReplyText body;
+  bool firstLine = true;
   for (size_t i = 0; i < result.responderCount; ++i) {
     const diagnostic::Responder& responder = result.responders[i];
-    if (i > 0) {
-      body += elm::responseEnding(renderSession);
+
+    if (!renderSession.headersEnabled || responder.rawFrameCount == 0) {
+      can::CanFrame representativeFrame;
+      if (responder.rawFrameCount > 0) {
+        representativeFrame = responder.rawFrames[0];
+      } else {
+        representativeFrame.id = responder.sourceId;
+        representativeFrame.extended = responder.extended;
+      }
+      if (!firstLine) {
+        body += elm::responseEnding(renderSession);
+      }
+      firstLine = false;
+      body += elm::formatResponseBody(renderSession, representativeFrame, responder.payload.data(),
+                                       responder.payloadLength, representativeFrame.dlc)
+                  .c_str();
+      continue;
     }
-    can::CanFrame representativeFrame;
-    if (responder.rawFrameCount > 0) {
-      representativeFrame = responder.rawFrames[0];
-    } else {
-      representativeFrame.id = responder.sourceId;
-      representativeFrame.extended = responder.extended;
+
+    // Headers-on: walk every raw frame, tracking the ISO-TP declared
+    // length across frames so only the *last* Consecutive Frame's real
+    // padding (if any) gets trimmed -- every frame before it is always
+    // fully meaningful (7 payload bytes), and a First Frame never has
+    // padding at all (2-byte PCI + 6 data bytes fill the classical
+    // 8-byte frame exactly).
+    size_t declaredLength = 0;
+    size_t consumedPayloadBytes = 0;
+    bool haveDeclaredLength = false;
+
+    for (size_t f = 0; f < responder.rawFrameCount; ++f) {
+      const can::CanFrame& frame = responder.rawFrames[f];
+      size_t rawBytesToShow = frame.dlc;
+
+      if (!renderSession.displayDlcEnabled) {  // ATD0: trim padding
+        auto pci = isotp::parsePci(frame.data.data(), frame.dlc);
+        if (pci.has_value()) {
+          if (pci->type == isotp::PciType::SingleFrame) {
+            rawBytesToShow = std::min<size_t>(frame.dlc, 1 + pci->length);
+          } else if (pci->type == isotp::PciType::FirstFrame) {
+            declaredLength = pci->length;
+            haveDeclaredLength = true;
+            consumedPayloadBytes = frame.dlc >= 2 ? frame.dlc - 2 : 0;
+            rawBytesToShow = frame.dlc;  // FF is always fully used, never padded
+          } else if (pci->type == isotp::PciType::ConsecutiveFrame && haveDeclaredLength) {
+            size_t remaining =
+                declaredLength > consumedPayloadBytes ? declaredLength - consumedPayloadBytes : 0;
+            size_t available = frame.dlc >= 1 ? frame.dlc - 1 : 0;
+            size_t take = std::min(available, remaining);
+            rawBytesToShow = 1 + take;
+            consumedPayloadBytes += take;
+          }
+        }
+      }
+
+      if (!firstLine) {
+        body += elm::responseEnding(renderSession);
+      }
+      firstLine = false;
+      body += elm::formatResponseBody(renderSession, frame, responder.payload.data(),
+                                       responder.payloadLength, rawBytesToShow)
+                  .c_str();
     }
-    body += elm::formatResponseBody(renderSession, representativeFrame, responder.payload.data(),
-                                     responder.payloadLength, representativeFrame.dlc)
-                .c_str();
   }
 
   elm::ElmReply reply;

@@ -261,6 +261,10 @@ own Notes rather than duplicated here:
 - `ATBD` returns only the last accepted RX frame, not "last TX and accepted
   RX" (T09).
 - T07's ESP32 platform adapters (TWAI, NVS) and T08's Bluetooth/UART
-  transports are code-complete and build-verified, but not yet exercised on
-  real hardware -- see [T07](tasks/07-esp32-platform-adapters.md)'s Blocker
-  section and [T10](tasks/10-validation-and-release-gate.md).
+  transports were exercised against a real board, a scanner app, and a
+  live vehicle on 2026-08-28 (multi-ECU `0100`, a complete multi-frame VIN
+  read, Bluetooth pairing) -- see [T07](tasks/07-esp32-platform-adapters.md)'s
+  Hardware validation update. The formal bench checklist (explicit
+  250 kbit/s switch, listen-only mode) and the full
+  [T10](tasks/10-validation-and-release-gate.md) release gate are still
+  not done.

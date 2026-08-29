@@ -18,6 +18,14 @@ class Esp32BluetoothTransport {
  private:
   app::ElmBluetoothSession session_;
   bool wasConnected_ = false;
+
+  // Debug-log-only buffer: accumulates received bytes and logs them as one
+  // "#DBG: BT> <line>" once a full command (terminated by \r) arrives,
+  // instead of one log line per byte. Purely a UART0 debug convenience --
+  // the real per-byte processing still goes through session_ unbuffered.
+  static constexpr size_t kLogBufferCapacity = 80;
+  char logBuffer_[kLogBufferCapacity + 1] = {};
+  size_t logBufferLen_ = 0;
 };
 
 }  // namespace esp_obd::platform::esp32
