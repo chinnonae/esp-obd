@@ -20,6 +20,7 @@ let opening = false; // guards against connect()/tryReconnect() racing each othe
 const requestQueue = [];
 let current = null; // {text, resolve, reject} for the in-flight command
 const listeners = new Set();
+let currentProtocol = null; // current protocol state
 
 function emit(event) {
   for (const listener of listeners) {
@@ -162,6 +163,24 @@ function withTimeout(promise, ms, message) {
 
 export function sendCommand(text) {
   return new Promise((resolve, reject) => {
+    // Check for protocol-setting commands and emit protocol events
+    const protocolMatch = text.match(/^(?:ATP|ATSP)([0-9A-Fa-f])/i);
+    if (protocolMatch) {
+      const protocolCode = protocolMatch[1].toUpperCase();
+      const PROTOCOL_MAP = {
+        "0": "Auto-search",
+        "6": "11-bit 500k",
+        "7": "29-bit 500k",
+        "8": "11-bit 250k",
+        "9": "29-bit 250k",
+      };
+      const protocolName = PROTOCOL_MAP[protocolCode] || `Unknown (${protocolCode})`;
+      if (protocolName !== currentProtocol) {
+        currentProtocol = protocolName;
+        emit({ type: "protocol", protocol: protocolName, timestamp: Date.now() });
+      }
+    }
+    
     requestQueue.push({ text, resolve, reject });
     pumpQueue();
   });
@@ -183,8 +202,24 @@ export async function disconnect() {
     await port.close().catch(() => {});
     port = null;
   }
+  // Clear protocol state on disconnect
+  if (currentProtocol !== null) {
+    currentProtocol = null;
+    emit({ type: "protocol", protocol: null, timestamp: Date.now() });
+  }
 }
 
 export function isConnected() {
   return port !== null;
+}
+
+/**
+ * Set the current protocol and emit a protocol-change event.
+ * Called by elm.js when protocol selection commands are processed.
+ */
+export function setProtocol(protocolName) {
+  if (protocolName !== currentProtocol) {
+    currentProtocol = protocolName;
+    emit({ type: "protocol", protocol: protocolName, timestamp: Date.now() });
+  }
 }

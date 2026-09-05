@@ -31,9 +31,24 @@ function appendEntry(event) {
   }
 
   const line = document.createElement("div");
-  line.className = `console-line console-line--${event.direction}`;
-  const prefix = event.direction === "tx" ? "TX" : "RX";
-  line.textContent = `[${formatTimestamp(event.timestamp)}] ${prefix} ${event.text}`;
+  
+  // Handle different event types
+  if (event.type === "protocol") {
+    line.className = "console-line console-line--info";
+    if (event.protocol === null) {
+      line.textContent = `[${formatTimestamp(event.timestamp)}] Protocol disconnected`;
+    } else if (event.protocol === "Auto-search") {
+      line.textContent = `[${formatTimestamp(event.timestamp)}] Protocol searching...`;
+    } else {
+      line.textContent = `[${formatTimestamp(event.timestamp)}] Protocol: ${event.protocol}`;
+    }
+  } else {
+    // TX/RX events
+    line.className = `console-line console-line--${event.direction}`;
+    const prefix = event.direction === "tx" ? "TX" : "RX";
+    line.textContent = `[${formatTimestamp(event.timestamp)}] ${prefix} ${event.text}`;
+  }
+  
   listEl.appendChild(line);
 
   if (!userScrolledUp) {

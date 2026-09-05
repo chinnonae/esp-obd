@@ -13,13 +13,16 @@
 <body>
   <header class="app-header">
     <h1 class="app-title">ESP-OBD</h1>
-    <div class="connection">
-      <label class="sim-toggle">
-        <input type="checkbox" id="simulator-toggle" />
-        Simulator
-      </label>
-      <span id="connection-status" class="status status--disconnected">Disconnected</span>
-      <button id="connect-button" type="button">Connect</button>
+    <div class="header-status">
+      <div id="protocol-status" class="protocol-status" title="CAN Protocol">—</div>
+      <div class="connection">
+        <label class="sim-toggle">
+          <input type="checkbox" id="simulator-toggle" />
+          Simulator
+        </label>
+        <span id="connection-status" class="status status--disconnected">Disconnected</span>
+        <button id="connect-button" type="button">Connect</button>
+      </div>
     </div>
   </header>
 

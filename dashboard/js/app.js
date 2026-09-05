@@ -44,6 +44,26 @@ function setStatus(statusEl, text, variant) {
   statusEl.className = `status status--${variant}`;
 }
 
+function initProtocolDisplay() {
+  const protocolStatusEl = document.getElementById("protocol-status");
+  
+  // Listen for protocol changes from serial module
+  serial.onEvent((event) => {
+    if (event.type === "protocol") {
+      if (event.protocol === null) {
+        protocolStatusEl.textContent = "—";
+        protocolStatusEl.removeAttribute("data-state");
+      } else if (event.protocol === "Auto-search") {
+        protocolStatusEl.textContent = "🔍 Searching...";
+        protocolStatusEl.setAttribute("data-state", "searching");
+      } else {
+        protocolStatusEl.textContent = `✓ ${event.protocol}`;
+        protocolStatusEl.setAttribute("data-state", "connected");
+      }
+    }
+  });
+}
+
 function initConnectButton() {
   const connectButton = document.getElementById("connect-button");
   const statusEl = document.getElementById("connection-status");
@@ -121,6 +141,7 @@ function initConnectButton() {
 
 registerServiceWorker();
 initTabs();
+initProtocolDisplay();
 initConnectButton();
 currentView.init();
 consoleView.init();

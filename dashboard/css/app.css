@@ -38,6 +38,32 @@ body {
   margin: 0;
 }
 
+.header-status {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.protocol-status {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  min-width: 120px;
+  text-align: right;
+}
+
+.protocol-status[data-state="searching"] {
+  color: var(--accent);
+}
+
+.protocol-status[data-state="connected"] {
+  color: var(--ok);
+  font-weight: 500;
+}
+
+.protocol-status[data-state="error"] {
+  color: var(--err);
+}
+
 .connection {
   display: flex;
   align-items: center;
@@ -148,6 +174,11 @@ button:hover {
 
 .console-line--rx {
   color: var(--text);
+}
+
+.console-line--info {
+  color: var(--text-dim);
+  font-style: italic;
 }
 
 .tile-group {
