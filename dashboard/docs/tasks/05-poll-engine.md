@@ -1,6 +1,6 @@
 # D05 - Poll Engine
 
-**Status:** Planned
+**Status:** Done (2026-09-05)
 **Depends on:** [D02](02-config-store-and-bundled-profile.md), [D03](03-serial-transport-and-elm-session.md), [D04](04-signal-decoder-and-synthetics.md)
 
 ## Goal
@@ -66,3 +66,21 @@ confirm the command set changes.
   init-sequence or framing assumptions there change, this task's response
   stripping logic (which assumes clean `41 <pid> <data...>` text) may need
   to change too.
+- Verified 2026-09-05 against the simulator (real hardware has no vehicle
+  attached on the bench, so every real PID currently returns `UNABLE TO
+  CONNECT` -- not useful for exercising decode paths, but real `sendCommand`
+  round-trips were already proven in D03):
+  - A full pass over the bundled SAEJ1979 profile (103 commands) against
+    the simulator correctly decoded every PID it answers (`RPM`, `VSS`,
+    `ECT`, `LOAD_PCT`, `TP`, `IAT`, `FLI`) and silently skipped the rest
+    (`NO DATA`) without stopping the loop.
+  - Switching the active profile mid-session (via `configStore
+    .setActiveProfileId`) changed the polled command set within one pass,
+    confirmed by the last several `onUpdate` events being exclusively the
+    new profile's signal after the switch, with no reconnect.
+  - `stop()` + `disconnect()` halted the loop with no unhandled rejections.
+- Only the first line of a response is parsed; a genuine multi-ECU reply
+  to the same filtered request hasn't been exercised against real hardware
+  (the bench unit currently answers with a single-ECU-shaped `ATCRA`
+  filter) -- flag this in [D10](10-integration-and-hardware-validation.md)
+  if a real multi-line case turns up.
