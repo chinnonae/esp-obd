@@ -6,12 +6,17 @@
 // is already framed over RFCOMM), but Web Serial's open() still requires one.
 const BAUD_RATE = 115200;
 const PROMPT = ">";
+// port.open() can hang indefinitely if the paired device isn't actually
+// connected/awake right now (observed against real ESP-OBD hardware) --
+// give up cleanly instead of leaving the caller stuck forever.
+const OPEN_TIMEOUT_MS = 8000;
 
 let port = null;
 let reader = null;
 let writer = null;
 let readLoopPromise = null;
 let rxBuffer = "";
+let opening = false; // guards against connect()/tryReconnect() racing each other
 const requestQueue = [];
 let current = null; // {text, resolve, reject} for the in-flight command
 const listeners = new Set();
@@ -93,24 +98,66 @@ async function readLoop() {
 }
 
 export async function connect() {
-  port = await navigator.serial.requestPort();
-  await port.open({ baudRate: BAUD_RATE });
+  if (opening || port) {
+    throw new Error("A serial connection is already open or connecting");
+  }
+  opening = true;
+  try {
+    const requested = await navigator.serial.requestPort();
+    await openPort(requested);
+  } finally {
+    opening = false;
+  }
+}
+
+export async function tryReconnect() {
+  if (opening || port) {
+    throw new Error("A serial connection is already open or connecting");
+  }
+  opening = true;
+  try {
+    const ports = await navigator.serial.getPorts();
+    if (ports.length === 0) {
+      return false;
+    }
+    await openPort(ports[0]);
+    return true;
+  } finally {
+    opening = false;
+  }
+}
+
+async function openPort(portToOpen) {
+  port = portToOpen;
+  try {
+    await withTimeout(
+      port.open({ baudRate: BAUD_RATE }),
+      OPEN_TIMEOUT_MS,
+      "Timed out opening the serial port -- is the device connected/awake?"
+    );
+  } catch (err) {
+    port = null;
+    throw err;
+  }
   rxBuffer = "";
   writer = port.writable.getWriter();
   readLoopPromise = readLoop();
 }
 
-export async function tryReconnect() {
-  const ports = await navigator.serial.getPorts();
-  if (ports.length === 0) {
-    return false;
-  }
-  port = ports[0];
-  await port.open({ baudRate: BAUD_RATE });
-  rxBuffer = "";
-  writer = port.writable.getWriter();
-  readLoopPromise = readLoop();
-  return true;
+function withTimeout(promise, ms, message) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      }
+    );
+  });
 }
 
 export function sendCommand(text) {

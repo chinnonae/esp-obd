@@ -20,7 +20,7 @@ a separate `D`-prefixed numbering so it isn't confused with the firmware's
 |---|---|---|---|
 | `[x]` | [D01 - App shell and PWA scaffold](01-app-shell-and-pwa-scaffold.md) | - | Installable static shell with tab navigation, serving locally |
 | `[x]` | [D02 - Config store and bundled generic profile](02-config-store-and-bundled-profile.md) | D01 | Persisted signal profiles, seeded with bundled SAEJ1979 |
-| `[!]` | [D03 - Serial transport and ELM327 session](03-serial-transport-and-elm-session.md) | D01 | Web Serial connect/init/command-queue against the real adapter |
+| `[x]` | [D03 - Serial transport and ELM327 session](03-serial-transport-and-elm-session.md) | D01 | Web Serial connect/init/command-queue against the real adapter |
 | `[x]` | [D04 - Signal decoder and synthetics](04-signal-decoder-and-synthetics.md) | - | OBDb `fmt`/`synthetics` decoding, verified against fixtures |
 | `[ ]` | [D05 - Poll engine](05-poll-engine.md) | D02, D03, D04 | Continuous polling loop producing decoded signal updates |
 | `[ ]` | [D06 - Current tab](06-current-tab.md) | D05 | Live tile grid view |

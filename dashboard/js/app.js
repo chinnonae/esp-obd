@@ -83,24 +83,30 @@ function initConnectButton() {
     await doConnect(simToggle.checked ? simulator : serial);
   });
 
-  // Try to reopen a previously authorized real port without a new user gesture.
+  // Try to reopen a previously authorized real port without a new user
+  // gesture. Left enabled while this runs: serial.js's own connect/
+  // tryReconnect guard rejects a manual click that overlaps this, rather
+  // than the button staying disabled indefinitely -- open() on some real
+  // adapters can hang far longer than any reasonable UI timeout (observed:
+  // a stale Bluetooth SPP pairing can block open() well past 8s).
   if (hasWebSerial) {
-    serial.tryReconnect().then((reconnected) => {
-      if (reconnected) {
-        elm
-          .initSession(serial)
-          .then(() => {
-            transport = serial;
-            setStatus(statusEl, "Connected", "connected");
-            connectButton.textContent = "Disconnect";
-            simToggle.disabled = true;
-          })
-          .catch((err) => {
-            console.error("Reconnect init failed:", err);
-            setStatus(statusEl, "Connect failed", "error");
-          });
-      }
-    });
+    serial
+      .tryReconnect()
+      .then((reconnected) => {
+        if (!reconnected) {
+          return;
+        }
+        return elm.initSession(serial).then(() => {
+          transport = serial;
+          setStatus(statusEl, "Connected", "connected");
+          connectButton.textContent = "Disconnect";
+          simToggle.disabled = true;
+        });
+      })
+      .catch((err) => {
+        console.error("Reconnect failed:", err);
+        return serial.disconnect().catch(() => {});
+      });
   }
 }
 

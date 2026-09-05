@@ -1,7 +1,6 @@
 # D03 - Serial Transport and ELM327 Session
 
-**Status:** Blocked — implemented and verified against an in-browser
-simulator; real hardware-in-the-loop verification still needed (see Notes)
+**Status:** Done (2026-09-05)
 **Depends on:** [D01](01-app-shell-and-pwa-scaffold.md)
 
 ## Goal
@@ -117,3 +116,32 @@ this file's Notes section once run.
     `5678`), serve `dashboard/`, uncheck Simulator, click Connect, and
     confirm the four items in Acceptance criteria above against the real
     device.
+- Two real bugs found and fixed only by testing against real hardware:
+  1. `serial.js`'s automatic `tryReconnect()` (on page load) and a manual
+     Connect click could race to open the same port concurrently, causing
+     `NetworkError: Failed to execute 'open' on 'SerialPort'`. Fixed with
+     an `opening`/`port` guard in `serial.js` so a second concurrent
+     open attempt fails fast with a clear error instead of corrupting
+     shared module state.
+  2. `port.open()` can hang indefinitely against a stale/duplicate
+     Bluetooth SPP pairing (Windows can accumulate several
+     `Standard Serial over Bluetooth link` COM ports for one device across
+     re-pairs; picking a stale one hangs `open()`, and the hang can block
+     even unrelated `setTimeout` callbacks in the same page). Fixed by no
+     longer disabling the Connect button while the background
+     `tryReconnect()` is in flight, so a manual Connect attempt is never
+     stuck waiting on a silent reconnect that may never resolve.
+- **Verified against real ESP-OBD hardware 2026-09-05** (after removing
+  stale Bluetooth pairings and re-pairing/picking the correct COM port —
+  `pio device list` showed 3 stale `LOCALMFG`-placeholder SPP ports
+  alongside the real one, a known Windows classic-BT quirk):
+  - Connect → native port picker → init sequence (`ATZ`/`ATE0`/`ATL0`/
+    `ATH0`) completed against the real adapter, status shows "Connected".
+  - `sendCommand('0100')` and `sendCommand('010C')` both returned
+    `UNABLE TO CONNECT` (no vehicle/CAN bus attached to the bench unit) —
+    a clean, correctly-framed rejection, not a hang or parse error, per
+    the acceptance criteria's explicitly-allowed outcome.
+  - Two `sendCommand()` calls fired without awaiting the first resolved
+    with correct, non-interleaved responses.
+  - Reloading the page and reconnecting worked without re-pairing
+    Bluetooth.
