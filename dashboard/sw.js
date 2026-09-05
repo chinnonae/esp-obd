@@ -1,5 +1,5 @@
 // Cache-first precache for offline/installable use. Bump on any asset change.
-const CACHE_NAME = "esp-obd-dashboard-v11";
+const CACHE_NAME = "esp-obd-dashboard-v13";
 
 const PRECACHE_URLS = [
   "./",
@@ -16,6 +16,7 @@ const PRECACHE_URLS = [
   "./js/views/current.js",
   "./js/views/console.js",
   "./js/views/config.js",
+  "./js/views/timeseries.js",
   "./data/saej1979.json",
   "./icons/icon-192.svg",
   "./icons/icon-512.svg",

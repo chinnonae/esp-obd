@@ -10,6 +10,7 @@ import * as pollEngine from "./poll-engine.js";
 import * as currentView from "./views/current.js";
 import * as consoleView from "./views/console.js";
 import * as configView from "./views/config.js";
+import * as timeseriesView from "./views/timeseries.js";
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) {
@@ -124,3 +125,4 @@ initConnectButton();
 currentView.init();
 consoleView.init();
 configView.init();
+timeseriesView.init();

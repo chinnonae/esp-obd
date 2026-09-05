@@ -57,3 +57,8 @@ immediately followed by its RX response).
   matching the real ~800ms round trip). Clear emptied the view immediately
   and new lines kept appending afterward. Disconnect stopped cleanly with
   no console errors.
+- **Regression found later (fixed in D09):** the `.view { display: flex }`
+  rule added here for the console log's layout unintentionally overrode
+  the browser's default `[hidden] { display: none }`, breaking tab
+  switching (inactive views stayed visible). Fixed with an explicit
+  `.view[hidden] { display: none; }` rule in `css/app.css`.

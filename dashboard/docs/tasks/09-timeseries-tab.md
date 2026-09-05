@@ -1,6 +1,6 @@
 # D09 - Timeseries Tab
 
-**Status:** Planned
+**Status:** Done (2026-09-05)
 **Depends on:** [D05](05-poll-engine.md)
 
 ## Goal
@@ -52,3 +52,18 @@ history appears immediately.
 - Keep the rolling-buffer store separate from the rendering code within
   this module so a future task could swap the chart implementation without
   touching data collection.
+- Found and fixed a real bug while verifying this task: D07's `.view {
+  display: flex }` CSS rule (added for the console log's layout) had
+  higher cascade priority than the browser's default `[hidden] {
+  display: none }`, so switching tabs stopped actually hiding inactive
+  views (they all rendered stacked/overlapping). Fixed by adding an
+  explicit `.view[hidden] { display: none; }` rule in `css/app.css`.
+- Verified 2026-09-05 against the simulator: switching to this tab after
+  several seconds on Current showed all previously-seen signals in the
+  picker immediately (buffer collection is subscribed at module load, not
+  tied to this view's `init()` or visibility); the canvas actually draws
+  (confirmed via pixel-content, not just a blank canvas) gridlines/labels/
+  line for the selected signal; changing the time window (1 min -> 5 min)
+  changed the visible range without losing buffered data; switching tabs
+  away and back several times left the canvas/select element counts
+  unchanged (no leaked nodes).
