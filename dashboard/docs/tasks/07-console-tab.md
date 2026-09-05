@@ -1,6 +1,6 @@
 # D07 - Console Tab
 
-**Status:** Planned
+**Status:** Done (2026-09-05)
 **Depends on:** [D03](03-serial-transport-and-elm-session.md)
 
 ## Goal
@@ -47,3 +47,13 @@ immediately followed by its RX response).
 
 - This view has no dependency on the decoder or config store — keep it that
   way, it's meant to work even when profile-based decoding doesn't.
+- Subscribes to both `serial.onEvent` and `simulator.onEvent` (only
+  whichever is actually connected ever emits) so it works regardless of
+  which transport `app.js` chose, without needing to know that choice.
+- Verified 2026-09-05 against the real adapter (auto-reconnected cleanly
+  via `tryReconnect`): every TX/RX line from the real init sequence and
+  poll-engine's requests appeared in order, each TX immediately followed by
+  its RX (e.g. `TX 0101` at `.354` → `RX UNABLE TO CONNECT` at `28.166`,
+  matching the real ~800ms round trip). Clear emptied the view immediately
+  and new lines kept appending afterward. Disconnect stopped cleanly with
+  no console errors.

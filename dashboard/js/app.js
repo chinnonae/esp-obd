@@ -8,6 +8,7 @@ import * as elm from "./elm.js";
 import * as configStore from "./config-store.js";
 import * as pollEngine from "./poll-engine.js";
 import * as currentView from "./views/current.js";
+import * as consoleView from "./views/console.js";
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) {
@@ -120,3 +121,4 @@ registerServiceWorker();
 initTabs();
 initConnectButton();
 currentView.init();
+consoleView.init();

@@ -114,6 +114,36 @@ button:hover {
 
 .view {
   height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.console-toolbar {
+  margin-bottom: 0.5rem;
+}
+
+.console-log {
+  flex: 1;
+  overflow-y: auto;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 0.8rem;
+}
+
+.console-line {
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.console-line--tx {
+  color: var(--accent);
+}
+
+.console-line--rx {
+  color: var(--text);
 }
 
 .tile-group {
