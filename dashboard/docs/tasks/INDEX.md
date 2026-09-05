@@ -27,7 +27,7 @@ a separate `D`-prefixed numbering so it isn't confused with the firmware's
 | `[x]` | [D07 - Console tab](07-console-tab.md) | D03 | Raw TX/RX log view |
 | `[x]` | [D08 - Config tab](08-config-tab.md) | D02 | Upload/select/delete profile UI |
 | `[x]` | [D09 - Timeseries tab](09-timeseries-tab.md) | D05 | Rolling buffers + canvas line chart view |
-| `[ ]` | [D10 - Integration and hardware validation](10-integration-and-hardware-validation.md) | D06, D07, D08, D09 | Wired-up app, validated against real ESP-OBD hardware |
+| `[!]` | [D10 - Integration and hardware validation](10-integration-and-hardware-validation.md) | D06, D07, D08, D09 | Wired-up app, validated against real ESP-OBD hardware |
 
 ## Working rules
 
