@@ -31,7 +31,7 @@ function appendEntry(event) {
   }
 
   const line = document.createElement("div");
-  
+
   // Handle different event types
   if (event.type === "protocol") {
     line.className = "console-line console-line--info";
@@ -48,7 +48,7 @@ function appendEntry(event) {
     const prefix = event.direction === "tx" ? "TX" : "RX";
     line.textContent = `[${formatTimestamp(event.timestamp)}] ${prefix} ${event.text}`;
   }
-  
+
   listEl.appendChild(line);
 
   if (!userScrolledUp) {

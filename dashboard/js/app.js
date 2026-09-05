@@ -46,7 +46,7 @@ function setStatus(statusEl, text, variant) {
 
 function initProtocolDisplay() {
   const protocolStatusEl = document.getElementById("protocol-status");
-  
+
   // Listen for protocol changes from serial module
   serial.onEvent((event) => {
     if (event.type === "protocol") {

@@ -37,7 +37,7 @@ async function fetchBuiltinProfile() {
 
 async function fetchBuiltinProfiles() {
   const profiles = {};
-  
+
   // Fetch SAEJ1979
   try {
     const saejUrl = new URL("../data/saej1979.json", import.meta.url);
@@ -52,7 +52,7 @@ async function fetchBuiltinProfiles() {
   } catch (e) {
     console.warn(`Failed to fetch SAEJ1979 profile: ${e.message}`);
   }
-  
+
   // Fetch Honda
   try {
     const hondaUrl = new URL("../data/honda.json", import.meta.url);
@@ -67,7 +67,7 @@ async function fetchBuiltinProfiles() {
   } catch (e) {
     console.warn(`Failed to fetch Honda profile: ${e.message}`);
   }
-  
+
   // Fetch Honda Civic
   try {
     const civicUrl = new URL("../data/honda-civic.json", import.meta.url);
@@ -82,7 +82,7 @@ async function fetchBuiltinProfiles() {
   } catch (e) {
     console.warn(`Failed to fetch Honda Civic profile: ${e.message}`);
   }
-  
+
   return profiles;
 }
 

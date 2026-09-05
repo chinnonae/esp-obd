@@ -63,7 +63,7 @@ function pidToHex(pid) {
  */
 export async function discoverSupportedPids(serial, elm) {
   const supportedPids = new Map(); // pidHex -> pidNumber
-  
+
   // Discovery commands and their corresponding PID ranges
   // Format: [discoveryCmd, pidBase]
   // Each command returns a 32-bit bitmask for PIDs in its range
@@ -89,7 +89,7 @@ export async function discoverSupportedPids(serial, elm) {
       if (!bytes) {
         continue; // NO DATA or malformed
       }
-      
+
       const dataBytes = stripEcho(bytes);
       if (!dataBytes || dataBytes.length < 4) {
         continue; // Not enough data
@@ -120,7 +120,7 @@ export async function discoverSupportedPids(serial, elm) {
 export async function discoverCustomCommands(serial, elm, commands) {
   const working = new Map(); // command -> true
   const noData = new Map(); // command -> metadata
-  
+
   for (const command of commands) {
     if (command.cmd?.["01"]) {
       // Skip Mode 01 commands (handled by discoverSupportedPids)
@@ -132,14 +132,14 @@ export async function discoverCustomCommands(serial, elm, commands) {
       const hdr = command.hdr;
       const rax = command.rax;
       const [[modeHex, pidHex]] = Object.entries(command.cmd);
-      
+
       // Set header for this command
       await elm.ensureHeader(serial, hdr, rax);
-      
+
       // Send the command
       const responseText = await serial.sendCommand(`${modeHex}${pidHex}`);
       const firstLine = responseText.split("\r")[0].trim();
-      
+
       if (ERROR_RESPONSE.test(firstLine)) {
         // NO DATA response
         noData.set(command, {
@@ -164,7 +164,7 @@ export async function discoverCustomCommands(serial, elm, commands) {
   const workingCount = working.size;
   const noDataCount = noData.size;
   console.log(`Custom PID discovery: ${workingCount} working, ${noDataCount} returning NO DATA`);
-  
+
   return { working, noData };
 }
 

@@ -24,7 +24,7 @@ let currentProtocol = null; // tracks current protocol state
 export async function initSession(serial) {
   lastHeader = null;
   lastRax = null;
-  
+
   for (const command of INIT_COMMANDS) {
     const response = await serial.sendCommand(command);
     if (ERROR_PATTERN.test(response.trim())) {

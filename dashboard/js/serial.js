@@ -180,7 +180,7 @@ export function sendCommand(text) {
         emit({ type: "protocol", protocol: protocolName, timestamp: Date.now() });
       }
     }
-    
+
     requestQueue.push({ text, resolve, reject });
     pumpQueue();
   });

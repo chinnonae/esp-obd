@@ -109,7 +109,7 @@ export function getState(profileId) {
 export function shouldRetry(profileId, command) {
   initProfile(profileId, []);
   const noDataMap = state[profileId].noData;
-  
+
   if (!noDataMap.has(command)) {
     return false; // Not in NO DATA list
   }

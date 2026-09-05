@@ -53,7 +53,7 @@ async function pollOnePass(serial, elm, profile) {
 
   for (const command of profile.commands) {
     const [[modeHex, pidHex]] = Object.entries(command.cmd);
-    
+
     // Skip Mode 01 PIDs that are not supported
     if (modeHex === "01" && !supportedPids.has(pidHex)) {
       continue;
@@ -65,7 +65,7 @@ async function pollOnePass(serial, elm, profile) {
     if (state.noData.has(command) && !discoveryState.shouldRetry(currentProfileId, command)) {
       continue; // Skip this command, backoff window not yet expired
     }
-    
+
     const hdrRax = `${command.hdr}:${command.rax}`;
     if (hdrRax !== lastHdrRax) {
       await elm.ensureHeader(serial, command.hdr, command.rax);
@@ -153,7 +153,7 @@ async function runLoop(serial, elm, configStore) {
     console.error("Custom command discovery failed:", err);
     // Proceed with polling anyway; backoff logic will handle NO DATA
   }
-  
+
   lastHdrRax = null;
 
   // Main polling loop
