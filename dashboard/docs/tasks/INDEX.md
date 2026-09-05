@@ -30,7 +30,7 @@ a separate `D`-prefixed numbering so it isn't confused with the firmware's
 | `[!]` | [D10 - Integration and hardware validation](10-integration-and-hardware-validation.md) | D06, D07, D08, D09 | Wired-up app, validated against real ESP-OBD hardware |
 | `[x]` | [D11 - Protocol status display](11-protocol-status-display.md) | D03, D07 | Show current CAN protocol mode in UI |
 | `[x]` | [D12 - Custom PID discovery with backoff](12-custom-pid-discovery-backoff.md) | D05, D08 | Smart NO DATA handling and user visibility toggle |
-| `[ ]` | [D13 - Bundle Honda and Honda-Civic profiles](13-bundle-honda-profiles.md) | D02, D05 | Manufacturer-specific OBDb profiles as built-in options |
+| `[x]` | [D13 - Bundle Honda and Honda-Civic profiles](13-bundle-honda-profiles.md) | D02, D05 | Manufacturer-specific OBDb profiles as built-in options |
 
 ## Working rules
 

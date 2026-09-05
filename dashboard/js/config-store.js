@@ -1,9 +1,14 @@
-// localStorage-backed signal-profile storage. Seeds the bundled SAEJ1979
-// profile on first load; the only module that talks to localStorage.
+// localStorage-backed signal-profile storage. Seeds the bundled SAEJ1979,
+// Honda, and Honda-Civic profiles on first load; the only module that talks
+// to localStorage.
 
 const STORAGE_KEY = "esp-obd-dashboard:profiles";
 const BUILTIN_ID = "saej1979";
 const BUILTIN_NAME = "SAEJ1979 (Generic OBD-II)";
+const BUILTIN_ID_HONDA = "builtin:honda";
+const BUILTIN_NAME_HONDA = "Honda (OBDb)";
+const BUILTIN_ID_CIVIC = "builtin:civic";
+const BUILTIN_NAME_CIVIC = "Honda Civic (OBDb)";
 
 function readStore() {
   const raw = localStorage.getItem(STORAGE_KEY);
@@ -30,16 +35,65 @@ async function fetchBuiltinProfile() {
   return response.json();
 }
 
+async function fetchBuiltinProfiles() {
+  const profiles = {};
+  
+  // Fetch SAEJ1979
+  try {
+    const saejUrl = new URL("../data/saej1979.json", import.meta.url);
+    const saejResponse = await fetch(saejUrl);
+    if (saejResponse.ok) {
+      profiles[BUILTIN_ID] = {
+        name: BUILTIN_NAME,
+        isBuiltin: true,
+        data: await saejResponse.json(),
+      };
+    }
+  } catch (e) {
+    console.warn(`Failed to fetch SAEJ1979 profile: ${e.message}`);
+  }
+  
+  // Fetch Honda
+  try {
+    const hondaUrl = new URL("../data/honda.json", import.meta.url);
+    const hondaResponse = await fetch(hondaUrl);
+    if (hondaResponse.ok) {
+      profiles[BUILTIN_ID_HONDA] = {
+        name: BUILTIN_NAME_HONDA,
+        isBuiltin: true,
+        data: await hondaResponse.json(),
+      };
+    }
+  } catch (e) {
+    console.warn(`Failed to fetch Honda profile: ${e.message}`);
+  }
+  
+  // Fetch Honda Civic
+  try {
+    const civicUrl = new URL("../data/honda-civic.json", import.meta.url);
+    const civicResponse = await fetch(civicUrl);
+    if (civicResponse.ok) {
+      profiles[BUILTIN_ID_CIVIC] = {
+        name: BUILTIN_NAME_CIVIC,
+        isBuiltin: true,
+        data: await civicResponse.json(),
+      };
+    }
+  } catch (e) {
+    console.warn(`Failed to fetch Honda Civic profile: ${e.message}`);
+  }
+  
+  return profiles;
+}
+
 // Top-level await: callers that `await import('./config-store.js')` (or
 // chain `.then()` off a dynamic import) only see this module once seeding
 // has finished, so the exports below can stay synchronous.
 let store = readStore();
 if (!store) {
-  const builtinData = await fetchBuiltinProfile();
+  const builtinProfiles = await fetchBuiltinProfiles();
   store = {
-    profiles: {
-      [BUILTIN_ID]: { name: BUILTIN_NAME, isBuiltin: true, data: builtinData },
-    },
+    profiles: builtinProfiles,
     activeId: BUILTIN_ID,
   };
   writeStore(store);
