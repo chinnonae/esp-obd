@@ -9,6 +9,7 @@ import * as configStore from "./config-store.js";
 import * as pollEngine from "./poll-engine.js";
 import * as currentView from "./views/current.js";
 import * as consoleView from "./views/console.js";
+import * as configView from "./views/config.js";
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) {
@@ -122,3 +123,4 @@ initTabs();
 initConnectButton();
 currentView.init();
 consoleView.init();
+configView.init();

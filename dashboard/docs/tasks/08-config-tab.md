@@ -1,6 +1,6 @@
 # D08 - Config Tab
 
-**Status:** Planned
+**Status:** Done (2026-09-05)
 **Depends on:** [D02](02-config-store-and-bundled-profile.md)
 
 ## Goal
@@ -52,3 +52,19 @@ tab ([D06](06-current-tab.md)) now shows that vehicle's signals.
 - This view only talks to `config-store.js` — it doesn't touch the serial
   port or the poll engine directly, matching the architecture's "views only
   subscribe" rule.
+- Verified 2026-09-05: an invalid upload (missing `commands`) was rejected
+  with a clear error and didn't touch the stored profile list; a real
+  vehicle signalset (`OBDb/Nissan-Leaf`'s `signalsets/v3/default.json`, 29
+  mode-22 commands with `fcm1`/multi-byte `bix` fields) uploaded
+  successfully through the actual file-input path, appeared in the list,
+  and could be made active. Activating a small hand-built profile was
+  immediately reflected on the Current tab (D06) via the simulator, next
+  poll-engine pass, no reconnect. Delete removed a non-builtin profile and
+  fell back the active id to the builtin when the active one was deleted;
+  the builtin has no delete button.
+- The Nissan-Leaf profile's mode-22 signals didn't produce Current-tab
+  tiles in this session because neither the simulator (Mode 01 only) nor
+  the bench unit (no real Leaf attached) answer those PIDs — the
+  upload/activate/poll-engine plumbing was confirmed, but decoding real
+  mode-22 responses end-to-end still needs a real vehicle or simulator
+  support for it (tracked as a general gap, not specific to this task).
