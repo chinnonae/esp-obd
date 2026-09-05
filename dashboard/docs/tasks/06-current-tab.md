@@ -1,6 +1,6 @@
 # D06 - Current Tab
 
-**Status:** Planned
+**Status:** Done (2026-09-05)
 **Depends on:** [D05](05-poll-engine.md)
 
 ## Goal
@@ -47,3 +47,15 @@ switch profile, confirm the tile set changes to match.
 
 - No chart/history here — that's [D09](09-timeseries-tab.md). This tab is
   deliberately just "what is it right now."
+- Added `configStore.onActiveProfileChange()` (small addition to D02's
+  `config-store.js`) as the event mechanism this tab (and later views)
+  subscribe to, fired from `setActiveProfileId()` and from `deleteProfile()`
+  when it falls back to the builtin.
+- Verified 2026-09-05 against the real adapter (connected, no vehicle
+  attached — 103-command pass took ~86s since every PID times out waiting
+  for a response; confirms poll-engine and this view don't hang, just run
+  at real-bus speed) and against the simulator (fast passes, ~5s for 103
+  commands): tiles render grouped by top-level `path`, update in place with
+  a stable DOM node count (7 tiles, unchanged across several update
+  rounds), and rebuild immediately (cleared, then repopulated from
+  `onUpdate`) when the active profile is switched mid-session.

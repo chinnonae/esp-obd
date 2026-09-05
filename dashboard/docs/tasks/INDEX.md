@@ -23,7 +23,7 @@ a separate `D`-prefixed numbering so it isn't confused with the firmware's
 | `[x]` | [D03 - Serial transport and ELM327 session](03-serial-transport-and-elm-session.md) | D01 | Web Serial connect/init/command-queue against the real adapter |
 | `[x]` | [D04 - Signal decoder and synthetics](04-signal-decoder-and-synthetics.md) | - | OBDb `fmt`/`synthetics` decoding, verified against fixtures |
 | `[x]` | [D05 - Poll engine](05-poll-engine.md) | D02, D03, D04 | Continuous polling loop producing decoded signal updates |
-| `[ ]` | [D06 - Current tab](06-current-tab.md) | D05 | Live tile grid view |
+| `[x]` | [D06 - Current tab](06-current-tab.md) | D05 | Live tile grid view |
 | `[ ]` | [D07 - Console tab](07-console-tab.md) | D03 | Raw TX/RX log view |
 | `[ ]` | [D08 - Config tab](08-config-tab.md) | D02 | Upload/select/delete profile UI |
 | `[ ]` | [D09 - Timeseries tab](09-timeseries-tab.md) | D05 | Rolling buffers + canvas line chart view |

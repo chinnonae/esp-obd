@@ -53,6 +53,13 @@ export function listProfiles() {
   }));
 }
 
+const activeProfileChangeListeners = new Set();
+
+export function onActiveProfileChange(callback) {
+  activeProfileChangeListeners.add(callback);
+  return () => activeProfileChangeListeners.delete(callback);
+}
+
 export function getProfile(id) {
   return store.profiles[id]?.data;
 }
@@ -67,6 +74,9 @@ export function setActiveProfileId(id) {
   }
   store.activeId = id;
   writeStore(store);
+  for (const listener of activeProfileChangeListeners) {
+    listener(id);
+  }
 }
 
 export function saveUploadedProfile(name, json) {
@@ -88,8 +98,14 @@ export function deleteProfile(id) {
     throw new Error("Cannot delete the builtin profile.");
   }
   delete store.profiles[id];
-  if (store.activeId === id) {
+  const activeChanged = store.activeId === id;
+  if (activeChanged) {
     store.activeId = BUILTIN_ID;
   }
   writeStore(store);
+  if (activeChanged) {
+    for (const listener of activeProfileChangeListeners) {
+      listener(store.activeId);
+    }
+  }
 }

@@ -5,6 +5,9 @@
 import * as serial from "./serial.js";
 import * as simulator from "./simulator.js";
 import * as elm from "./elm.js";
+import * as configStore from "./config-store.js";
+import * as pollEngine from "./poll-engine.js";
+import * as currentView from "./views/current.js";
 
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) {
@@ -61,6 +64,7 @@ function initConnectButton() {
       transport = mod;
       setStatus(statusEl, mod === simulator ? "Connected (simulator)" : "Connected", "connected");
       connectButton.textContent = "Disconnect";
+      pollEngine.start(mod, elm, configStore);
     } catch (err) {
       console.error("Connect failed:", err);
       setStatus(statusEl, "Connect failed", "error");
@@ -73,6 +77,7 @@ function initConnectButton() {
 
   connectButton.addEventListener("click", async () => {
     if (transport?.isConnected()) {
+      pollEngine.stop();
       await transport.disconnect();
       transport = null;
       setStatus(statusEl, "Disconnected", "disconnected");
@@ -101,6 +106,7 @@ function initConnectButton() {
           setStatus(statusEl, "Connected", "connected");
           connectButton.textContent = "Disconnect";
           simToggle.disabled = true;
+          pollEngine.start(serial, elm, configStore);
         });
       })
       .catch((err) => {
@@ -113,3 +119,4 @@ function initConnectButton() {
 registerServiceWorker();
 initTabs();
 initConnectButton();
+currentView.init();
