@@ -110,3 +110,61 @@ export async function discoverSupportedPids(serial, elm) {
   console.log(`Discovered ${supportedPids.size} supported PIDs:`, Array.from(supportedPids.keys()).join(", "));
   return supportedPids;
 }
+
+/**
+ * Discovers which custom commands (non-Mode-01) actually return data.
+ * Tests each command once and classifies as working or NO DATA.
+ * Returns { working: Map<command, true>, noData: Map<command, metadata> }
+ * where metadata tracks backoff attempts.
+ */
+export async function discoverCustomCommands(serial, elm, commands) {
+  const working = new Map(); // command -> true
+  const noData = new Map(); // command -> metadata
+  
+  for (const command of commands) {
+    if (command.cmd?.["01"]) {
+      // Skip Mode 01 commands (handled by discoverSupportedPids)
+      working.set(command, true);
+      continue;
+    }
+
+    try {
+      const hdr = command.hdr;
+      const rax = command.rax;
+      const [[modeHex, pidHex]] = Object.entries(command.cmd);
+      
+      // Set header for this command
+      await elm.ensureHeader(serial, hdr, rax);
+      
+      // Send the command
+      const responseText = await serial.sendCommand(`${modeHex}${pidHex}`);
+      const firstLine = responseText.split("\r")[0].trim();
+      
+      if (ERROR_RESPONSE.test(firstLine)) {
+        // NO DATA response
+        noData.set(command, {
+          failCount: 1,
+          lastRetry: Date.now(),
+          nextRetry: Date.now() + 10000, // 10 seconds
+        });
+      } else {
+        // Has data
+        working.set(command, true);
+      }
+    } catch (err) {
+      // Treat network errors as NO DATA for now
+      noData.set(command, {
+        failCount: 1,
+        lastRetry: Date.now(),
+        nextRetry: Date.now() + 10000,
+      });
+    }
+  }
+
+  const workingCount = working.size;
+  const noDataCount = noData.size;
+  console.log(`Custom PID discovery: ${workingCount} working, ${noDataCount} returning NO DATA`);
+  
+  return { working, noData };
+}
+

@@ -2,6 +2,7 @@
 // delete profiles. Never touches the serial port or poll engine directly.
 
 import * as configStore from "../config-store.js";
+import * as discoveryState from "../discovery-state.js";
 
 let listEl = null;
 let statusEl = null;
@@ -85,6 +86,18 @@ export function init() {
   statusEl = document.createElement("div");
   statusEl.className = "config-status";
 
+  // Add "Show NO DATA" toggle
+  const noDataToggleLabel = document.createElement("label");
+  noDataToggleLabel.className = "config-toggle";
+  const noDataCheckbox = document.createElement("input");
+  noDataCheckbox.type = "checkbox";
+  noDataCheckbox.checked = discoveryState.getShowNoData();
+  noDataCheckbox.addEventListener("change", () => {
+    discoveryState.setShowNoData(noDataCheckbox.checked);
+  });
+  noDataToggleLabel.appendChild(noDataCheckbox);
+  noDataToggleLabel.append(" Show unresponsive PIDs (NO DATA)");
+
   listEl = document.createElement("div");
   listEl.className = "profile-list";
 
@@ -97,7 +110,7 @@ export function init() {
   attributionLink.textContent = "OBDb/SAEJ1979";
   attribution.append("Built-in generic OBD-II profile: ", attributionLink, " (CC BY-SA 4.0).");
 
-  root.append(uploadLabel, statusEl, listEl, attribution);
+  root.append(uploadLabel, statusEl, noDataToggleLabel, listEl, attribution);
 
   fileInput.addEventListener("change", () => {
     const file = fileInput.files[0];

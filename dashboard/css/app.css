@@ -241,6 +241,18 @@ button:hover {
   color: var(--err);
 }
 
+.config-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.config-toggle input[type="checkbox"] {
+  cursor: pointer;
+}
+
 .profile-list {
   display: flex;
   flex-direction: column;

@@ -1,6 +1,6 @@
 # D12 - Custom PID Discovery with Incremental Backoff and NO DATA Toggle
 
-**Status:** Planned
+**Status:** Done
 
 ## Goal
 
