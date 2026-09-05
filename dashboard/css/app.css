@@ -1,0 +1,140 @@
+:root {
+  color-scheme: dark;
+  --bg: #101418;
+  --bg-raised: #1a2028;
+  --border: #2a323c;
+  --text: #e8edf2;
+  --text-dim: #8b98a5;
+  --accent: #3ba7ff;
+  --ok: #3bd671;
+  --err: #ff5c5c;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border);
+}
+
+.app-title {
+  font-size: 1.1rem;
+  margin: 0;
+}
+
+.connection {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.sim-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.status {
+  font-size: 0.85rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+}
+
+.status--disconnected {
+  color: var(--text-dim);
+}
+
+.status--connected {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
+.status--error {
+  color: var(--err);
+  border-color: var(--err);
+}
+
+button {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.4rem 0.9rem;
+  cursor: pointer;
+}
+
+button:hover {
+  border-color: var(--accent);
+}
+
+.tab-bar {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-raised);
+}
+
+.tab-button {
+  flex: 1;
+  border: none;
+  border-radius: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  padding: 0.75rem;
+}
+
+.tab-button[aria-selected="true"] {
+  border-bottom-color: var(--accent);
+  color: var(--accent);
+}
+
+.views {
+  flex: 1;
+  padding: 1rem;
+}
+
+.view {
+  height: 100%;
+}
+
+.tile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.75rem;
+}
+
+.tile {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem;
+}
+
+.tile .tile-name {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+.tile .tile-value {
+  font-size: 1.5rem;
+  font-weight: 600;
+}

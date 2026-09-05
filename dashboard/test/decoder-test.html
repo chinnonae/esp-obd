@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>decoder.js fixture tests</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #101418; color: #e8edf2; padding: 1rem; }
+    .pass { color: #3bd671; }
+    .fail { color: #ff5c5c; }
+    li { margin-bottom: 0.4rem; }
+  </style>
+</head>
+<body>
+  <h1>decoder.js fixture tests</h1>
+  <ul id="results"></ul>
+  <p id="summary"></p>
+
+  <script type="module">
+    import { extractBits, applyScale, decodeResponse, computeSynthetics } from "../js/decoder.js";
+
+    const results = [];
+
+    function assertEqual(name, actual, expected) {
+      const pass = JSON.stringify(actual) === JSON.stringify(expected);
+      results.push({ name, pass, actual, expected });
+    }
+
+    // RPM: {"len": 16, "max": 16383.75, "div": 4, "unit": "rpm"} against raw
+    // bytes 1A F8 (OBDb/SAEJ1979 cmd 010C). 0x1AF8 = 6904; 6904 / 4 = 1726.
+    {
+      const command = {
+        signals: [{ id: "RPM", fmt: { len: 16, max: 16383.75, div: 4, unit: "rpm" } }],
+      };
+      const decoded = decodeResponse(command, [0x1a, 0xf8]);
+      assertEqual("RPM decodes 1A F8 to 1726", decoded.RPM, 1726);
+    }
+
+    // CCM_RDY from OBDb/SAEJ1979 cmd 0101: {"bix": 9, "len": 1, ...} -- a
+    // non-byte-aligned single bit inside byte index 1.
+    {
+      // byte0 = 0x00, byte1 = 0b01000000 -> bit 9 (byte1, offset 1 from MSB) = 1
+      const raw = extractBits([0x00, 0x40], 9, 1);
+      assertEqual("bix:9,len:1 reads bit 9 as 1", raw, 1);
+    }
+    {
+      const raw = extractBits([0x00, 0x00], 9, 1);
+      assertEqual("bix:9,len:1 reads bit 9 as 0", raw, 0);
+    }
+
+    // EVAP_VP from OBDb/SAEJ1979 cmd 0132: {"len": 16, "div": 4000, "sign": true}.
+    // 0xF060 as a 16-bit two's complement value is -4000; -4000 / 4000 = -1.
+    {
+      const command = {
+        signals: [{ id: "EVAP_VP", fmt: { len: 16, div: 4000, sign: true } }],
+      };
+      const decoded = decodeResponse(command, [0xf0, 0x60]);
+      assertEqual("EVAP_VP decodes signed 0xF060 to -1", decoded.EVAP_VP, -1);
+    }
+
+    // A map-based enum field (shape borrowed from OBDb/SAEJ1979's FUELSYS1).
+    {
+      const command = {
+        signals: [
+          {
+            id: "FUELSYS1",
+            fmt: { len: 8, map: { "2": { description: "Closed loop", value: "CL" } } },
+          },
+        ],
+      };
+      const decoded = decodeResponse(command, [0x02]);
+      assertEqual("map lookup resolves raw 2 to 'CL'", decoded.FUELSYS1, "CL");
+
+      const unmapped = decodeResponse(command, [0x99]);
+      assertEqual("map lookup returns undefined for an unmapped raw value", unmapped.FUELSYS1, undefined);
+    }
+
+    // blsb (byte-swapped): reverses the byte order of the field's window
+    // before big-endian bit extraction.
+    {
+      const withoutSwap = extractBits([0x00, 0x01], 0, 16, { blsb: false });
+      const withSwap = extractBits([0x00, 0x01], 0, 16, { blsb: true });
+      assertEqual("blsb:false reads [0x00,0x01] as 1", withoutSwap, 1);
+      assertEqual("blsb:true reads [0x00,0x01] as 256", withSwap, 256);
+    }
+
+    // ratio synthetic: computed once both inputs are present, omitted otherwise.
+    {
+      const synthetics = [{ id: "RATIO_AB", formula: { op: "ratio", a: "A", b: "B" } }];
+      const both = computeSynthetics({ A: 10, B: 2 }, synthetics);
+      assertEqual("ratio computes A/B once both inputs are present", both.RATIO_AB, 5);
+
+      const missing = computeSynthetics({ A: 10 }, synthetics);
+      assertEqual("ratio is omitted when an input is missing", "RATIO_AB" in missing, false);
+    }
+
+    const list = document.getElementById("results");
+    let passCount = 0;
+    for (const r of results) {
+      const li = document.createElement("li");
+      li.className = r.pass ? "pass" : "fail";
+      li.textContent = `${r.pass ? "PASS" : "FAIL"} - ${r.name}` +
+        (r.pass ? "" : ` (expected ${JSON.stringify(r.expected)}, got ${JSON.stringify(r.actual)})`);
+      list.appendChild(li);
+      if (r.pass) passCount++;
+    }
+    const summary = document.getElementById("summary");
+    summary.textContent = `${passCount} / ${results.length} passed`;
+    summary.className = passCount === results.length ? "pass" : "fail";
+  </script>
+</body>
+</html>
