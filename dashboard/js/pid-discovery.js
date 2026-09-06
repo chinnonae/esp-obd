@@ -86,13 +86,16 @@ export async function discoverSupportedPids(serial, elm) {
 
   for (const [discoveryCmd, pidBase] of discoveryCommands) {
     try {
+      console.log(`[Discovery] Sending: ${discoveryCmd}`);
       const responseText = await withTimeout(
         serial.sendCommand(discoveryCmd),
         5000,
         `PID discovery timeout for ${discoveryCmd}`
       );
+      console.log(`[Discovery] Response: ${discoveryCmd} = ${responseText.split("\r")[0]}`);
       const bytes = parseResponseBytes(responseText);
       if (!bytes) {
+        console.log(`[Discovery] ${discoveryCmd} returned NO DATA or error`);
         continue; // NO DATA or malformed
       }
 
@@ -143,15 +146,18 @@ export async function discoverCustomCommands(serial, elm, commands) {
       await elm.ensureHeader(serial, hdr, rax);
 
       // Send the command with timeout
+      console.log(`[CustomDiscovery] Sending: ${modeHex}${pidHex} (hdr=${hdr})`);
       const responseText = await withTimeout(
         serial.sendCommand(`${modeHex}${pidHex}`),
         5000,
         `Custom command timeout for ${modeHex}${pidHex}`
       );
       const firstLine = responseText.split("\r")[0].trim();
+      console.log(`[CustomDiscovery] Response: ${modeHex}${pidHex} = ${firstLine}`);
 
       if (ERROR_RESPONSE.test(firstLine)) {
         // NO DATA response
+        console.log(`[CustomDiscovery] ${modeHex}${pidHex} returned NO DATA`);
         noData.set(command, {
           failCount: 1,
           lastRetry: Date.now(),

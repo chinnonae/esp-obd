@@ -26,7 +26,9 @@ export async function initSession(serial) {
   lastRax = null;
 
   for (const command of INIT_COMMANDS) {
+    console.log(`[ELM] Init: ${command}`);
     const response = await serial.sendCommand(command);
+    console.log(`[ELM] Init response: ${command} = ${response.trim()}`);
     if (ERROR_PATTERN.test(response.trim())) {
       throw new Error(`ELM327 init failed on ${command}: ${response}`);
     }
@@ -40,10 +42,12 @@ export async function initSession(serial) {
  */
 export async function ensureHeader(serial, hdr, rax) {
   if (hdr !== lastHeader) {
+    console.log(`[ELM] Setting header: ATSH${hdr}`);
     await serial.sendCommand(`ATSH${hdr}`);
     lastHeader = hdr;
   }
   if (rax !== lastRax) {
+    console.log(`[ELM] Setting receive address: ATCRA${rax}`);
     await serial.sendCommand(`ATCRA${rax}`);
     lastRax = rax;
   }

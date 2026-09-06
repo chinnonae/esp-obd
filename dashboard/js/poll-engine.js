@@ -75,14 +75,18 @@ async function pollOnePass(serial, elm, profile) {
 
     let responseText;
     try {
+      const cmdStr = `${modeHex}${pidHex}`;
+      console.log(`[Poll] Sending: ${cmdStr} (${command.hdr})`);
       responseText = await withTimeout(
-        serial.sendCommand(`${modeHex}${pidHex}`),
+        serial.sendCommand(cmdStr),
         10000,
-        `Poll timeout for ${modeHex}${pidHex}`
+        `Poll timeout for ${cmdStr}`
       );
+      console.log(`[Poll] Response: ${cmdStr} = ${responseText.split("\r")[0]}`);
     } catch (err) {
       // Transport failure or timeout -- abandon this pass
       // rather than hammer more requests at a dead connection.
+      console.error(`[Poll] Error: ${err.message}`);
       if (typeof serial.isConnected === "function" && !serial.isConnected()) {
         stop();
       }
