@@ -1,6 +1,7 @@
 // ELM327 init sequence and header-switch helper, built on serial.js.
 
 const INIT_COMMANDS = ["ATZ", "ATE0", "ATL0", "ATH0"];
+const PROTOCOL_INIT_COMMAND = "ATSP0"; // Auto-search for protocol
 const ERROR_PATTERN = /^(NO DATA|UNABLE TO CONNECT|ERROR|BUS INIT|\?)/i;
 
 // Protocol mapping for ATSP commands
@@ -25,6 +26,8 @@ export async function initSession(serial) {
   lastHeader = null;
   lastRax = null;
 
+  console.log("[ELM] Starting ELM327 initialization sequence...");
+
   for (const command of INIT_COMMANDS) {
     console.log(`[ELM] Init: ${command}`);
     const response = await serial.sendCommand(command);
@@ -33,6 +36,16 @@ export async function initSession(serial) {
       throw new Error(`ELM327 init failed on ${command}: ${response}`);
     }
   }
+
+  // Enable protocol auto-search
+  console.log(`[ELM] Init: ${PROTOCOL_INIT_COMMAND}`);
+  const protocolResponse = await serial.sendCommand(PROTOCOL_INIT_COMMAND);
+  console.log(`[ELM] Init response: ${PROTOCOL_INIT_COMMAND} = ${protocolResponse.trim()}`);
+  if (ERROR_PATTERN.test(protocolResponse.trim())) {
+    throw new Error(`ELM327 protocol init failed on ${PROTOCOL_INIT_COMMAND}: ${protocolResponse}`);
+  }
+
+  console.log("[ELM] ELM327 initialization complete, ready for discovery");
 }
 
 /**

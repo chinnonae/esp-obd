@@ -143,6 +143,10 @@ async function runLoop(serial, elm, configStore) {
   currentProfileId = configStore.getActiveProfileId();
   discoveryState.initProfile(currentProfileId, profile.commands);
 
+  console.log("═══════════════════════════════════════════════════════════");
+  console.log("Starting discovery phase with", profile.commands.length, "commands");
+  console.log("═══════════════════════════════════════════════════════════");
+
   console.log("Starting Mode 01 PID discovery...");
   try {
     const discovered = await discoverSupportedPids(serial, elm);
@@ -162,6 +166,10 @@ async function runLoop(serial, elm, configStore) {
     console.error("Custom command discovery failed:", err);
     // Proceed with polling anyway; backoff logic will handle NO DATA
   }
+
+  console.log("═══════════════════════════════════════════════════════════");
+  console.log("Discovery complete. Starting main polling loop...");
+  console.log("═══════════════════════════════════════════════════════════");
 
   lastHdrRax = null;
 
