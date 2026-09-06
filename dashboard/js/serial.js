@@ -145,7 +145,7 @@ async function openPort(portToOpen) {
   readLoopPromise = readLoop();
 }
 
-function withTimeout(promise, ms, message) {
+export function withTimeout(promise, ms, message) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(message)), ms);
     promise.then(

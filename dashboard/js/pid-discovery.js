@@ -2,6 +2,8 @@
 // Queries 0100, 0120, 0140, 0160, 0180, 01A0 to determine which PIDs
 // the vehicle supports, then returns a Set of supported PID hex strings.
 
+import { withTimeout } from "./serial.js";
+
 const ERROR_RESPONSE = /^(NO DATA|UNABLE TO CONNECT|ERROR|BUS INIT|STOPPED|\?)/i;
 
 /**
@@ -84,7 +86,11 @@ export async function discoverSupportedPids(serial, elm) {
 
   for (const [discoveryCmd, pidBase] of discoveryCommands) {
     try {
-      const responseText = await serial.sendCommand(discoveryCmd);
+      const responseText = await withTimeout(
+        serial.sendCommand(discoveryCmd),
+        5000,
+        `PID discovery timeout for ${discoveryCmd}`
+      );
       const bytes = parseResponseBytes(responseText);
       if (!bytes) {
         continue; // NO DATA or malformed
@@ -136,8 +142,12 @@ export async function discoverCustomCommands(serial, elm, commands) {
       // Set header for this command
       await elm.ensureHeader(serial, hdr, rax);
 
-      // Send the command
-      const responseText = await serial.sendCommand(`${modeHex}${pidHex}`);
+      // Send the command with timeout
+      const responseText = await withTimeout(
+        serial.sendCommand(`${modeHex}${pidHex}`),
+        5000,
+        `Custom command timeout for ${modeHex}${pidHex}`
+      );
       const firstLine = responseText.split("\r")[0].trim();
 
       if (ERROR_RESPONSE.test(firstLine)) {

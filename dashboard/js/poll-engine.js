@@ -3,6 +3,7 @@
 // Current/Timeseries tabs. No DOM/localStorage access of its own.
 
 import { decodeResponse, computeSynthetics } from "./decoder.js";
+import { withTimeout } from "./serial.js";
 import { discoverSupportedPids, discoverCustomCommands } from "./pid-discovery.js";
 import * as discoveryState from "./discovery-state.js";
 
@@ -74,9 +75,13 @@ async function pollOnePass(serial, elm, profile) {
 
     let responseText;
     try {
-      responseText = await serial.sendCommand(`${modeHex}${pidHex}`);
+      responseText = await withTimeout(
+        serial.sendCommand(`${modeHex}${pidHex}`),
+        10000,
+        `Poll timeout for ${modeHex}${pidHex}`
+      );
     } catch (err) {
-      // Transport failure (e.g. disconnected mid-pass) -- abandon this pass
+      // Transport failure or timeout -- abandon this pass
       // rather than hammer more requests at a dead connection.
       if (typeof serial.isConnected === "function" && !serial.isConnected()) {
         stop();
