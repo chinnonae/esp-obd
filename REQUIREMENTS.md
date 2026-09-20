@@ -10,16 +10,18 @@
 - **Module**: `src/transport/websocket_server.h/cpp`
 - **How it works**:
   - ESP32 connects to WiFi (SSID/password hardcoded in firmware)
-  - ESP32 registers mDNS hostname: `esp-obd.local`
   - ESP32 runs WebSocket server on port 8080
-  - Web dashboard (on mobile) connects to `ws://esp-obd.local:8080`
+  - User manually enters ESP32 IP address in web dashboard
+  - Web dashboard (on mobile) connects to `ws://192.168.1.100:8080` (or your IP)
   - Data flows: ESP32 → WebSocket → Browser → Gauges
+  - **Finding the IP**: Use serial debug mode (see #2 below) to discover IP on startup
 - **Advantages**:
   - More stable than Bluetooth Serial
   - Works with standard web browsers (no app store dependency)
   - Lower latency (IP + WebSocket)
   - Multiple clients can connect simultaneously
   - Self-hosted web app (no cloud dependency)
+  - No complex mDNS discovery (mobile devices often disable it)
 - **Testing**:
   - Unit test WebSocket frame encoding/decoding
   - Integration test: verify server accepts connection, broadcasts telemetry
@@ -42,7 +44,7 @@
     │  ├─ Wait for ECU response
     │  └─ Parse response and update values
     └─ Every 100ms: serialize current values to JSON and broadcast via WebSocket
-  
+
   Web App:
     └─ Just receives JSON packets and updates gauges
   ```
@@ -139,6 +141,64 @@
 
 ---
 
+### 5. Serial Debug/Test Mode (Development Feature)
+
+**Requirement**: Add an interactive serial interface via UART0 for testing and discovery during development.
+
+**Implementation**:
+- **Module**: `src/transport/serial_debug.h/cpp`
+- **How it works**:
+  - Connect USB-to-UART adapter to UART0 (GPIO1 TX, GPIO3 RX)
+  - Open serial terminal: `pio device monitor -e ioxesp32`
+  - Interactive commands available:
+    ```
+    > STATUS
+    Device Status:
+    - Uptime: 1234 seconds
+    - WiFi IP: 192.168.1.100
+    - WebSocket Port: 8080
+    - Connected clients: 1
+    - CAN frames received: 5678
+    - Last poll cycle: 2500ms
+
+    > TEST_PID 0x0C
+    Sending PID 0x0C request...
+    Response received: RPM = 1500
+
+    > DISCOVER
+    Scanning for supported PIDs...
+    0x00: SUPPORTED
+    0x0C: SUPPORTED (RPM)
+    0x0D: SUPPORTED (Speed)
+    0x0E: NOT_SUPPORTED
+    ... (scanning 0x00-0xFF)
+    Scan complete. Found 15 supported PIDs.
+
+    > HELP
+    Available commands:
+    - STATUS             Show device status
+    - TEST_PID <0xNN>    Test a specific PID
+    - DISCOVER           Scan for supported PIDs
+    - REBOOT             Restart device
+    - HELP               Show this message
+    ```
+- **Why this is important for testability**:
+  - **Find IP address**: Run `STATUS` to see WiFi IP before connecting web app
+  - **Test individual PIDs**: `TEST_PID 0x0C` validates PID decoder without full polling
+  - **Discover supported PIDs**: `DISCOVER` scans 0x00-0xFF to find what vehicle supports
+  - **Debug issues**: `STATUS` shows real-time CAN frame count, connection state
+  - **No mobile needed**: Can test ESP32 with just USB cable and terminal
+- **Output format**:
+  - All debug output prefixed with `#DBG: ` (distinguishable from user commands)
+  - Example: `#DBG: Initialized CAN (500kbps, 29-bit)`
+  - Command responses use plain text (easy to read)
+- **Testing**:
+  - Unit test command parsing
+  - Integration test: verify commands execute and return correct responses
+  - Manual test: connect via USB and issue commands
+
+---
+
 ## Architecture Alignment
 
 ```
@@ -148,6 +208,7 @@ Your Requirements          → Architecture Module          → Testable?
 #2: Server-side polling    obd/polling_engine             ✓ Unit tests
 #3: GitHub Pages dashboard dashboard/ (HTML/CSS/JS)       ✓ Manual + integration
 #4: Hardcoded CAN (500k)   can/can_driver + config        ✓ Unit + integration
+#5: Serial debug/test      transport/serial_debug         ✓ Unit + integration
 ```
 
 ## Development Phases
@@ -198,6 +259,7 @@ Your Requirements          → Architecture Module          → Testable?
 | CAN frame structures | `src/can/can_frame.h` | 29-bit ID handling |
 | OBD PID list | `include/obd/pid_config.h` | Hardcoded PIDs to poll |
 | WebSocket protocol | `src/transport/websocket_server.h` | RFC 6455 implementation |
+| Serial debug commands | `src/transport/serial_debug.h` | Interactive testing via UART0 |
 | Main entry point | `src/main.cpp` | ESP32 setup() and loop() |
 | Web dashboard | `dashboard/index.html` | HTML + embedded JS |
 | Configuration constants | `include/*/config.h` | All hardcoded values (CAN, WiFi, etc.) |

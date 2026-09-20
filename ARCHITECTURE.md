@@ -36,6 +36,14 @@
 │  │  └────────────────────┬────────────────────────────┘ │ │
 │  │                       │                              │ │
 │  │  ┌────────────────────▼────────────────────────────┐ │ │
+│  │  │  Serial Debug Interface (UART0)                 │ │ │
+│  │  │  - Interactive commands: STATUS, TEST_PID, etc. │ │ │
+│  │  │  - Connect via USB-to-UART adapter              │ │ │
+│  │  │  - Used for testing and PID discovery           │ │ │
+│  │  │  - Run: pio device monitor -e ioxesp32         │ │ │
+│  │  └────────────────────┬────────────────────────────┘ │ │
+│  │                       │                              │ │
+│  │  ┌────────────────────▼────────────────────────────┐ │ │
 │  │  │  Polling Engine                                 │ │ │
 │  │  │  - Maintains polling cycle state                │ │ │
 │  │  │  - Generates CAN transmission requests          │ │ │
@@ -54,8 +62,9 @@
 │  │  ┌──────────────────▼────────────────────────────┐   │ │
 │  │  │  WiFi & Network                               │   │ │
 │  │  │  - Connect to SSID (hardcoded)                 │   │ │
-│  │  │  - mDNS discovery (esp-obd.local)             │   │ │
 │  │  │  - Maintain WebSocket connections             │   │ │
+│  │  │  - No mDNS (mobile devices often disable it)   │   │ │
+│  │  │  - User finds IP via serial debug interface    │   │ │
 │  │  └────────────────────────────────────────────────┘   │ │
 │  └───────────────────────────────────────────────────────┘ │
 │                                                             │
@@ -63,7 +72,7 @@
 │  │              Hardware Interfaces                      │ │
 │  │                                                       │ │
 │  │  CAN Bus ─────► ESP32 TWAI (GPIO 26/27, 500kbps)   │ │
-│  │  Serial (UART0) ─► Debug/Monitor Output             │ │
+│  │  Serial (UART0) ─► Debug interface (GPIO1 TX/3 RX)  │ │
 │  │  WiFi Antenna ─── WiFi Connection (2.4GHz)         │ │
 │  └───────────────────────────────────────────────────────┘ │
 └───────────────────────────────────────────────────────────┘
@@ -83,20 +92,28 @@
 ```
 1. ESP32 Powers On
    └─► Initialize Serial (UART0, 115200 baud)
+   └─► Print debug messages: #DBG: Initialized...
    └─► Initialize CAN (TWAI, 500kbps, 29-bit)
    └─► Connect WiFi (SSID/password hardcoded)
-   └─► Register mDNS hostname (esp-obd.local)
+   └─► Print IP address: #DBG: WiFi connected. IP: 192.168.1.100
    └─► Start WebSocket Server (port 8080)
    └─► Begin Polling Engine
+   └─► Print prompt: > (ready for serial commands)
 
-2. Web Dashboard Opens
-   └─► Display IP address input field
-   └─► User enters "esp-obd.local" or finds via mDNS
+2. Developer Connects to Serial
+   └─► Run: pio device monitor -e ioxesp32
+   └─► Type: STATUS
+   └─► See: Device IP: 192.168.1.100, WebSocket Port: 8080
 
-3. User Clicks "Connect"
-   └─► WebSocket client connects to ws://esp-obd.local:8080
+3. Web Dashboard Opens (on mobile)
+   └─► User enters IP address: 192.168.1.100 (found from serial STATUS)
+   └─► Click "Connect"
+
+4. WebSocket Client Connects
+   └─► WebSocket client connects to ws://192.168.1.100:8080
    └─► Server sends initial state
    └─► Web app enters "connected" state
+   └─► Serial shows: #DBG: WebSocket client connected
 ```
 
 ### Data Collection Cycle (every 100ms)
@@ -193,12 +210,30 @@ Polling Engine Loop:
 - **Note**: May use IDF-native WebSocket library or minimal custom impl
 
 ### `transport/wifi_config.h/cpp`
-- **Responsibility**: WiFi connection and discovery
+- **Responsibility**: WiFi connection and network management
 - **Public API**:
   - `connect()` → Join SSID
-  - `register_mdns(hostname)` → Advertise mDNS
   - `is_connected()` → State check
-  - `get_ip_address()` → Return current IP
+  - `get_ip_address()` → Return current IP (printed to serial)
+- **Note**: No mDNS (mobile devices often disable it). User finds IP via serial debug interface.
+
+### `transport/serial_debug.h/cpp`
+- **Responsibility**: Interactive debug interface via UART0
+- **Public API**:
+  - `init()` → Initialize serial 115200 baud
+  - `poll()` → Check for input, execute commands
+  - `print(msg)` → Output (prefixed with `#DBG: ` for auto messages)
+- **Commands**:
+  - `STATUS` → Print device status (IP, connections, CAN stats)
+  - `TEST_PID <0xNN>` → Test a single PID, show response
+  - `DISCOVER` → Scan 0x00-0xFF to find supported PIDs
+  - `REBOOT` → Restart device
+  - `HELP` → Show available commands
+- **Output format**: 
+  - Auto messages: `#DBG: <message>` (printed without prompt)
+  - Command responses: Plain text (printed after `> `)
+  - Prompt: `> ` (shown when ready for input)
+- **Tests**: Unit tests with simulated serial input/output
 
 ### `utils/json_builder.h/cpp`
 - **Responsibility**: Build telemetry JSON packets
@@ -206,6 +241,99 @@ Polling Engine Loop:
   - `build_telemetry(values, timestamp)` → JSON string
   - `build_status(conn_status)` → Status JSON
 - **Note**: Minimal memory footprint, no external JSON lib
+
+## Serial Debug Interface
+
+The ESP32 exposes an interactive debug interface via UART0 for development and testing.
+
+### Usage
+
+```bash
+# Open serial monitor
+pio device monitor -e ioxesp32
+
+# You should see:
+# #DBG: Initialized CAN (500kbps, 29-bit)
+# #DBG: Connecting to WiFi...
+# #DBG: Connected. IP: 192.168.1.100
+# #DBG: WebSocket server listening on :8080
+# #DBG: Starting polling engine
+# >
+
+# Now you can type commands:
+> STATUS
+Device Status:
+- Uptime: 1234 seconds
+- WiFi IP: 192.168.1.100
+- WebSocket Port: 8080
+- Connected clients: 0
+- CAN frames received: 5678
+- Last CAN error: None
+
+> TEST_PID 0x0C
+#DBG: Sending PID 0x0C request...
+#DBG: Received response
+RPM = 1500
+
+> TEST_PID 0x0D
+#DBG: Sending PID 0x0D request...
+#DBG: Received response
+Speed = 65 km/h
+
+> DISCOVER
+#DBG: Scanning for supported PIDs (0x00-0xFF)...
+0x00: SUPPORTED
+0x0C: SUPPORTED (RPM)
+0x0D: SUPPORTED (Speed)
+0x0E: NOT_SUPPORTED
+0x10: SUPPORTED (MAF Air Flow)
+... [more PIDs]
+#DBG: Scan complete. Found 15 supported PIDs.
+
+> REBOOT
+#DBG: Rebooting...
+[device restarts]
+```
+
+### Output Format
+
+**Auto Messages** (printed without prompt):
+- Format: `#DBG: <message>`
+- Example: `#DBG: WebSocket client connected`
+- When: Automatically by firmware (connection, errors, events)
+
+**Command Responses** (printed after `> ` prompt):
+- Format: Plain text, human-readable
+- Example: `Device Status:` followed by details
+- When: In response to user commands
+
+**Command Prompt**:
+- Format: `> `
+- When: Ready for next command
+
+### Purpose
+
+The serial debug interface serves several purposes during development and testing:
+
+1. **Finding the IP Address**: Run `STATUS` to see the WiFi IP (needed to connect web app)
+2. **Testing Individual PIDs**: `TEST_PID 0x0C` validates PID decoder without full polling loop
+3. **Discovering Supported PIDs**: `DISCOVER` scans the ECU to find what data it provides
+4. **Debugging Issues**: `STATUS` shows CAN frame count, connection state, errors
+5. **Device Control**: `REBOOT` restarts if needed
+
+### Hardware Setup
+
+- **Serial Port**: UART0 (GPIO 1 TX, GPIO 3 RX)
+- **Baud Rate**: 115200
+- **No Flow Control**: CTS/RTS not used
+- **Connection**: USB-to-UART adapter (e.g., CP2102, CH340)
+
+### Implementation Notes
+
+- Serial processing runs in main `loop()`, non-blocking
+- Commands parsed as simple text (space-delimited)
+- Responses printed directly (no JSON)
+- No authentication or command rate limiting (development tool only)
 
 ## Testing Architecture
 
@@ -217,7 +345,8 @@ test/
 │   ├── can_driver_test.cpp
 │   ├── polling_engine_test.cpp
 │   ├── pid_decoder_test.cpp
-│   └── json_builder_test.cpp
+│   ├── json_builder_test.cpp
+│   └── serial_debug_test.cpp
 └── integration/
     └── esp32_hardware_test.ino  (manual, upload to device)
 ```

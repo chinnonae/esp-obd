@@ -5,6 +5,7 @@
 Redesign ESP-OBD for simplicity and testability:
 - **ESP32 firmware**: WiFi-based WebSocket server with hardcoded CAN config (500kbps, 29-bit)
 - **Web dashboard**: GitHub Pages hosted static app that connects to ESP32 and displays live data
+- **Serial debug interface**: Interactive UART0 commands for testing and IP discovery
 - **Testing**: Unit tests for core logic, integration tests on device
 
 ## Architecture
@@ -13,10 +14,10 @@ Redesign ESP-OBD for simplicity and testability:
 
 **Role**: Real-time data collector and server
 - CAN bus listener (hardcoded 500kbps, 29-bit addressing)
-- WiFi connection with mDNS discovery
+- WiFi connection (SSID/password hardcoded, no mDNS)
 - WebSocket server for client connections
 - Local polling engine collecting OBD data
-- Serial debug output on UART0
+- Serial debug interface on UART0 for testing and IP discovery
 
 **Key modules**:
 ```
@@ -30,7 +31,8 @@ src/
 │   └── polling_engine.h/cpp # Poll cycle logic (timing, PIDs)
 ├── transport/
 │   ├── websocket_server.h/cpp # WebSocket protocol handler
-│   └── wifi_config.h/cpp    # WiFi SSID/password, mDNS
+│   ├── wifi_config.h/cpp    # WiFi SSID/password, connection
+│   └── serial_debug.h/cpp   # Interactive UART0 commands
 └── utils/
     └── json_builder.h/cpp   # Build JSON telemetry packets
 ```
@@ -73,10 +75,13 @@ dashboard/
 ```
 
 **User Flow**:
-1. Open dashboard on mobile (GitHub Pages URL)
-2. Enter ESP32 IP address (discovered via mDNS or manual)
-3. Click "Connect"
-4. Live telemetry displayed in gauges
+1. Power on ESP32 (connect to development PC via USB)
+2. Open serial monitor: `pio device monitor -e ioxesp32`
+3. Type `STATUS` to see device IP address
+4. Open web dashboard on mobile (GitHub Pages URL)
+5. Enter device IP address: `192.168.1.100`
+6. Click "Connect"
+7. Live telemetry displayed in gauges
 
 ## Testing Strategy
 
@@ -117,11 +122,12 @@ Test end-to-end on real hardware:
 - Handle ECU responses and timeouts
 - Unit tests for timing and sequencing
 
-### Task 3: ESP32 Platform Layer
+### Task 3: ESP32 Platform Layer & Serial Debug
 - Initialize TWAI CAN controller (500kbps, 29-bit)
 - Implement CAN transmit/receive
-- Initialize WiFi and mDNS
-- Serial debug logging
+- Initialize WiFi (no mDNS)
+- Implement serial debug interface (STATUS, TEST_PID, DISCOVER, REBOOT commands)
+- Serial debug logging (print IP address at startup)
 
 ### Task 4: WebSocket Server
 - Implement minimal WebSocket protocol (RFC 6455)
@@ -155,7 +161,6 @@ static constexpr bool USE_29BIT_ID = true;  // Extended addressing
 ```cpp
 static constexpr const char* WIFI_SSID = "MyNetwork";
 static constexpr const char* WIFI_PASSWORD = "password";
-static constexpr const char* MDNS_NAME = "esp-obd";
 static constexpr uint16_t WEBSOCKET_PORT = 8080;
 ```
 
@@ -168,15 +173,16 @@ static constexpr uint16_t WEBSOCKET_PORT = 8080;
 ## Benefits
 
 1. **Simplicity**: No ELM327 command layer, no Bluetooth hassle
-2. **Testability**: 
+2. **Testability**:
    - Core logic testable without hardware
    - WebSocket protocol is standard and well-understood
    - Web app is standard JavaScript (no special toolchain)
-3. **Reliability**: 
+   - Serial debug interface for testing individual PIDs and discovering supported PIDs
+3. **Reliability**:
    - IP connection more stable than Bluetooth Serial
    - Server-side polling ensures consistent data collection
-   - mDNS discovery eliminates manual IP entry
-4. **Scalability**: 
+   - Serial debug interface provides real-time status and error visibility
+4. **Scalability**:
    - Can add more clients (multiple phones viewing same data)
    - Can extend PID list without firmware rebuild (future: SD card config)
 5. **Mobile-friendly**: Standard web tech, works on any phone with a browser
