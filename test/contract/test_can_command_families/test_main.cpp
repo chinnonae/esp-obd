@@ -3,6 +3,7 @@
 #include "../../support/fake_can_port.h"
 #include "../../support/in_memory_settings_store.h"
 #include "app/elm_application.h"
+#include "elm/protocol_mapping.h"
 
 using namespace esp_obd;
 using namespace esp_obd::can;
@@ -98,7 +99,7 @@ void test_atdp_shows_auto_prefix_only_after_auto_search_success() {
   TEST_ASSERT_EQUAL_STRING("A6\r\r", app.execute(0, "ATDPN").text.c_str());
 }
 
-void test_atsthh_sets_timeout_max_4_or_hhx4() {
+void test_atsthh_sets_timeout_hhx4_and_st00_restores_default() {
   FakeCanPort port;
   InMemorySettingsStore store;
   app::ElmApplication app(port, store);
@@ -106,8 +107,65 @@ void test_atsthh_sets_timeout_max_4_or_hhx4() {
   app.execute(0, "ATST64");  // 0x64 = 100 -> 400ms
   TEST_ASSERT_EQUAL_UINT32(400, app.engine().session().responseTimeoutMs);
 
-  app.execute(0, "ATST00");  // 0 -> floor of 4ms
+  app.execute(0, "ATST01");  // smallest real value: 4ms
   TEST_ASSERT_EQUAL_UINT32(4, app.engine().session().responseTimeoutMs);
+
+  app.execute(0, "ATST00");  // not "0 ms": restores the 200ms default
+  TEST_ASSERT_EQUAL_UINT32(200, app.engine().session().responseTimeoutMs);
+}
+
+void test_atctm5_multiplies_the_response_timeout() {
+  FakeCanPort port;
+  InMemorySettingsStore store;
+  app::ElmApplication app(port, store);
+  app.execute(0, "ATSP6");
+  app.execute(0, "ATST0A");  // 40ms
+  app.execute(0, "ATCTM5");  // x5 = 200ms
+
+  app.execute(0, "0100");  // nobody answers
+  TEST_ASSERT_FALSE(app.poll(199));
+  TEST_ASSERT_TRUE(app.poll(200));
+  TEST_ASSERT_EQUAL_STRING("NO DATA\r\r", app.takeDiagnosticReply().text.c_str());
+}
+
+void test_atz_and_atd_return_to_the_protocol_saved_by_atsp() {
+  FakeCanPort port;
+  InMemorySettingsStore store;
+  app::ElmApplication app(port, store);
+
+  app.execute(0, "ATSP6");
+  app.execute(0, "ATH1");
+  app.execute(0, "ATZ");
+  TEST_ASSERT_EQUAL(static_cast<int>(ElmProtocol::Iso15765_11bit_500k),
+                    static_cast<int>(app.engine().session().protocol));
+  TEST_ASSERT_TRUE(app.engine().session().protocolConnected);
+  TEST_ASSERT_FALSE(app.engine().session().headersEnabled);  // everything else reset
+
+  app.execute(0, "ATSP7");
+  app.execute(0, "ATD");
+  TEST_ASSERT_EQUAL(static_cast<int>(ElmProtocol::Iso15765_29bit_500k),
+                    static_cast<int>(app.engine().session().protocol));
+  TEST_ASSERT_EQUAL_UINT32(0x18DB33F1, app.engine().session().requestId);
+
+  app.execute(0, "ATSP0");
+  app.execute(0, "ATWS");
+  TEST_ASSERT_EQUAL(static_cast<int>(ElmProtocol::AutomaticSearch),
+                    static_cast<int>(app.engine().session().protocol));
+  TEST_ASSERT_FALSE(app.engine().session().protocolConnected);
+}
+
+void test_attp_does_not_change_the_saved_protocol() {
+  FakeCanPort port;
+  InMemorySettingsStore store;
+  app::ElmApplication app(port, store);
+
+  app.execute(0, "ATSP6");
+  app.execute(0, "ATTP7");
+  TEST_ASSERT_EQUAL(static_cast<int>(ElmProtocol::Iso15765_29bit_500k),
+                    static_cast<int>(app.engine().session().protocol));
+  app.execute(0, "ATZ");
+  TEST_ASSERT_EQUAL(static_cast<int>(ElmProtocol::Iso15765_11bit_500k),
+                    static_cast<int>(app.engine().session().protocol));
 }
 
 void test_atat_sets_adaptive_timing_mode() {
@@ -154,13 +212,15 @@ void test_atsh_sets_standard_and_extended_header_and_rejects_out_of_range() {
   app::ElmApplication app(port, store);
 
   TEST_ASSERT_EQUAL_STRING("OK\r\r", app.execute(0, "ATSH7E0").text.c_str());
-  TEST_ASSERT_EQUAL_UINT32(0x7E0, *app.engine().session().customHeaderId);
+  TEST_ASSERT_EQUAL_UINT32(0x7E0, *app.engine().session().customHeader);
 
   TEST_ASSERT_EQUAL_STRING("?\r\r", app.execute(0, "ATSH800").text.c_str());  // > 0x7FF
-  TEST_ASSERT_EQUAL_UINT32(0x7E0, *app.engine().session().customHeaderId);   // unchanged
+  TEST_ASSERT_EQUAL_UINT32(0x7E0, *app.engine().session().customHeader);   // unchanged
 
+  // 8 digits: low 3 bytes are the header, the first byte the priority bits.
   TEST_ASSERT_EQUAL_STRING("OK\r\r", app.execute(0, "ATSH18DB33F1").text.c_str());
-  TEST_ASSERT_EQUAL_UINT32(0x18DB33F1, *app.engine().session().customHeaderId);
+  TEST_ASSERT_EQUAL_UINT32(0xDB33F1, *app.engine().session().customHeader);
+  TEST_ASSERT_EQUAL_UINT8(0x18, app.engine().session().priorityBits);
 
   TEST_ASSERT_EQUAL_STRING("?\r\r", app.execute(0, "ATSH20000000").text.c_str());  // > 0x1FFFFFFF
 }
@@ -172,21 +232,71 @@ void test_atsh_accepts_6digit_shorthand_under_29bit_protocol() {
 
   app.execute(0, "ATSP7");  // ISO 15765-4, 29-bit, 500k
   TEST_ASSERT_EQUAL_STRING("OK\r\r", app.execute(0, "ATSHDA11F1").text.c_str());
-  TEST_ASSERT_EQUAL_UINT32(0x18DA11F1, *app.engine().session().customHeaderId);
+  TEST_ASSERT_EQUAL_UINT32(0x18DA11F1,
+                           requestCanIdFor(app.engine().session(),
+                                           obd::ObdCanProtocol::Iso15765_29bit_500k).id);
 
   TEST_ASSERT_EQUAL_STRING("OK\r\r", app.execute(0, "ATSHDBEFF1").text.c_str());
-  TEST_ASSERT_EQUAL_UINT32(0x18DBEFF1, *app.engine().session().customHeaderId);
+  TEST_ASSERT_EQUAL_UINT32(0x18DBEFF1,
+                           requestCanIdFor(app.engine().session(),
+                                           obd::ObdCanProtocol::Iso15765_29bit_500k).id);
 }
 
-void test_atsh_rejects_6digit_shorthand_under_11bit_protocol() {
+// Found via WiCAN's notes on Car Scanner: the app sends ATSH before ATSP7.
+// The 6-digit header must be accepted in any protocol state and take effect
+// once the 29-bit protocol is selected.
+void test_atsh_6digit_set_before_atsp7_is_used_for_the_next_request() {
   FakeCanPort port;
   InMemorySettingsStore store;
   app::ElmApplication app(port, store);
 
-  app.execute(0, "ATSP6");  // ISO 15765-4, 11-bit, 500k
-  ElmSession before = app.engine().session();
-  TEST_ASSERT_EQUAL_STRING("?\r\r", app.execute(0, "ATSHDA11F1").text.c_str());
-  TEST_ASSERT_TRUE(before == app.engine().session());
+  TEST_ASSERT_EQUAL_STRING("OK\r\r", app.execute(0, "ATSHDA10F1").text.c_str());  // still SP0
+  app.execute(0, "ATSP7");
+  port.queueRx(*makeExtendedFrame(0x18DAF110, {0x03, 0x62, 0xF1, 0x90, 0, 0, 0, 0}, 8));
+  app.execute(0, "22F190");
+
+  TEST_ASSERT_EQUAL(1, port.transmitted().size());
+  TEST_ASSERT_EQUAL_UINT32(0x18DA10F1, port.transmitted()[0].id);
+  TEST_ASSERT_TRUE(port.transmitted()[0].extended);
+  TEST_ASSERT_EQUAL_STRING("62 F1 90\r\r", app.takeDiagnosticReply().text.c_str());
+}
+
+void test_atsh_6digit_under_11bit_protocol_uses_low_11_bits() {
+  FakeCanPort port;
+  InMemorySettingsStore store;
+  app::ElmApplication app(port, store);
+
+  app.execute(0, "ATSP6");
+  TEST_ASSERT_EQUAL_STRING("OK\r\r", app.execute(0, "ATSH0007E0").text.c_str());
+  app.execute(0, "ATR0");  // transmit only
+  app.execute(0, "0100");
+  TEST_ASSERT_EQUAL(1, port.transmitted().size());
+  TEST_ASSERT_EQUAL_UINT32(0x7E0, port.transmitted()[0].id);
+  TEST_ASSERT_FALSE(port.transmitted()[0].extended);
+}
+
+void test_atsh_3digit_under_29bit_protocol_builds_a_29bit_id_with_priority() {
+  FakeCanPort port;
+  InMemorySettingsStore store;
+  app::ElmApplication app(port, store);
+
+  app.execute(0, "ATSP7");
+  app.execute(0, "ATSH7E0");  // header bytes 00 07 E0
+  TEST_ASSERT_EQUAL_UINT32(0x180007E0,
+                           requestCanIdFor(app.engine().session(),
+                                           obd::ObdCanProtocol::Iso15765_29bit_500k).id);
+}
+
+void test_atcp_changes_the_priority_of_a_29bit_header() {
+  FakeCanPort port;
+  InMemorySettingsStore store;
+  app::ElmApplication app(port, store);
+
+  app.execute(0, "ATSHDA10F1");
+  app.execute(0, "ATCP10");
+  TEST_ASSERT_EQUAL_UINT32(0x10DA10F1,
+                           requestCanIdFor(app.engine().session(),
+                                           obd::ObdCanProtocol::Iso15765_29bit_500k).id);
 }
 
 void test_atcp_sets_priority_bits() {
@@ -243,12 +353,96 @@ void test_atfcsm_sets_flow_control_mode() {
   FakeCanPort port;
   InMemorySettingsStore store;
   app::ElmApplication app(port, store);
-  app.execute(0, "ATFCSM1");
-  TEST_ASSERT_EQUAL(static_cast<int>(FlowControlMode::ManualHeaderAndData),
+
+  // Manual modes are refused until their inputs are set.
+  TEST_ASSERT_EQUAL_STRING("?\r\r", app.execute(0, "ATFCSM1").text.c_str());
+  TEST_ASSERT_EQUAL_STRING("?\r\r", app.execute(0, "ATFCSM2").text.c_str());
+  TEST_ASSERT_EQUAL(static_cast<int>(FlowControlMode::Automatic),
                      static_cast<int>(app.engine().session().flowControlMode));
-  app.execute(0, "ATFCSM2");
+
+  app.execute(0, "ATFCSD300000");
+  TEST_ASSERT_EQUAL_STRING("OK\r\r", app.execute(0, "ATFCSM2").text.c_str());
   TEST_ASSERT_EQUAL(static_cast<int>(FlowControlMode::ManualDataAutoHeader),
                      static_cast<int>(app.engine().session().flowControlMode));
+  TEST_ASSERT_EQUAL_STRING("?\r\r", app.execute(0, "ATFCSM1").text.c_str());  // no FCSH yet
+
+  app.execute(0, "ATFCSH7E0");
+  TEST_ASSERT_EQUAL_STRING("OK\r\r", app.execute(0, "ATFCSM1").text.c_str());
+  TEST_ASSERT_EQUAL(static_cast<int>(FlowControlMode::ManualHeaderAndData),
+                     static_cast<int>(app.engine().session().flowControlMode));
+}
+
+namespace {
+// First Frame of a 10-byte reply, then the single CF that completes it.
+const CanFrame kFirstFrame29 =
+    *makeExtendedFrame(0x142AF1CB, {0x10, 0x0A, 0x62, 0x2B, 0x43, 0x01, 0x02, 0x03}, 8);
+const CanFrame kConsecutive29 =
+    *makeExtendedFrame(0x142AF1CB, {0x21, 0x04, 0x05, 0x06, 0x07, 0, 0, 0}, 8);
+
+void runUntilIdle(app::ElmApplication& app) {
+  for (Milliseconds t = 1; app.diagnosticPending() && t < 1000; ++t) {
+    app.poll(t);
+  }
+}
+}  // namespace
+
+// The init string of WiCAN's Honda Prologue profile: the ECU answers from an
+// id outside the OBD range and expects Flow Control on a specific id.
+void test_fcsm1_sends_flow_control_with_manual_header_and_data() {
+  FakeCanPort port;
+  InMemorySettingsStore store;
+  app::ElmApplication app(port, store);
+  for (const char* cmd : {"ATSP7", "ATSHDACBF1", "ATCRA142AF1CB", "ATFCSH14DACBF1",
+                          "ATFCSD300000", "ATFCSM1"}) {
+    TEST_ASSERT_EQUAL_STRING("OK\r\r", app.execute(0, cmd).text.c_str());
+  }
+
+  port.queueRx(kFirstFrame29);
+  app.execute(0, "222B431");
+  port.queueRx(kConsecutive29);
+  runUntilIdle(app);
+
+  TEST_ASSERT_EQUAL(2, port.transmitted().size());  // request + Flow Control
+  const CanFrame& fc = port.transmitted()[1];
+  TEST_ASSERT_EQUAL_UINT32(0x14DACBF1, fc.id);
+  TEST_ASSERT_TRUE(fc.extended);
+  const uint8_t expected[8] = {0x30, 0x00, 0x00, 0, 0, 0, 0, 0};
+  TEST_ASSERT_EQUAL_HEX8_ARRAY(expected, fc.data.data(), 8);
+  TEST_ASSERT_EQUAL_STRING("00A\r0: 62 2B 43 01 02 03\r1: 04 05 06 07\r\r",
+                           app.takeDiagnosticReply().text.c_str());
+}
+
+void test_fcsm2_sends_manual_data_to_the_derived_header() {
+  FakeCanPort port;
+  InMemorySettingsStore store;
+  app::ElmApplication app(port, store);
+  for (const char* cmd : {"ATSP7", "ATSHDACBF1", "ATCRA142AF1CB", "ATFCSD300A05", "ATFCSM2"}) {
+    TEST_ASSERT_EQUAL_STRING("OK\r\r", app.execute(0, cmd).text.c_str());
+  }
+
+  port.queueRx(kFirstFrame29);
+  app.execute(0, "222B431");
+  port.queueRx(kConsecutive29);
+  runUntilIdle(app);
+
+  const CanFrame& fc = port.transmitted()[1];
+  TEST_ASSERT_EQUAL_UINT32(0x18DACBF1, fc.id);  // derived from responder 0x..CB
+  const uint8_t expected[8] = {0x30, 0x0A, 0x05, 0, 0, 0, 0, 0};
+  TEST_ASSERT_EQUAL_HEX8_ARRAY(expected, fc.data.data(), 8);
+}
+
+void test_cfc0_suppresses_flow_control_even_in_manual_mode() {
+  FakeCanPort port;
+  InMemorySettingsStore store;
+  app::ElmApplication app(port, store);
+  for (const char* cmd : {"ATSP7", "ATSHDACBF1", "ATCRA142AF1CB", "ATFCSH14DACBF1",
+                          "ATFCSD300000", "ATFCSM1", "ATCFC0"}) {
+    app.execute(0, cmd);
+  }
+  port.queueRx(kFirstFrame29);
+  app.execute(0, "222B431");
+  runUntilIdle(app);
+  TEST_ASSERT_EQUAL(1, port.transmitted().size());  // the request only
 }
 
 void test_atfcsh_sets_manual_flow_control_id() {
@@ -354,7 +548,7 @@ void test_atv_toggles_variable_dlc_flag() {
   TEST_ASSERT_FALSE(app.engine().session().variableDlcEnabled);
 }
 
-void test_atbd_reports_no_data_then_the_last_accepted_frame() {
+void test_atbd_reports_no_data_then_the_last_request_and_accepted_frame() {
   FakeCanPort port;
   InMemorySettingsStore store;
   app::ElmApplication app(port, store);
@@ -363,10 +557,29 @@ void test_atbd_reports_no_data_then_the_last_accepted_frame() {
 
   app.execute(0, "ATSH7E0");
   port.queueRx(*makeStandardFrame(0x7E8, {0x02, 0x41, 0x00, 0, 0, 0, 0, 0}, 8));
-  app.execute(0, "0100");  // physical (ATSH set): completes with one response
+  // No protocol selected yet: this request is the auto-search, which (as on an
+  // ELM327) uses the functional id 7DF rather than the ATSH header.
+  app.execute(0, "01001");
 
   ElmReply dump = app.execute(0, "ATBD");
-  TEST_ASSERT_EQUAL_STRING("7E8 8 02 41 00 00 00 00 00 00\r\r", dump.text.c_str());
+  TEST_ASSERT_EQUAL_STRING(
+      "7DF 8 02 01 00 00 00 00 00 00\r"
+      "7E8 8 02 41 00 00 00 00 00 00\r\r",
+      dump.text.c_str());
+}
+
+void test_atbd_after_no_data_shows_just_the_request() {
+  FakeCanPort port;
+  InMemorySettingsStore store;
+  app::ElmApplication app(port, store);
+  app.execute(0, "ATSP6");
+  app.execute(0, "ATSH7E0");
+  app.execute(0, "0100");
+  runUntilIdle(app);
+  TEST_ASSERT_EQUAL_STRING("NO DATA\r\r", app.takeDiagnosticReply().text.c_str());
+
+  TEST_ASSERT_EQUAL_STRING("7E0 8 02 01 00 00 00 00 00 00\r\r",
+                           app.execute(0, "ATBD").text.c_str());
 }
 
 void test_monitor_all_prints_every_frame() {
@@ -427,19 +640,28 @@ int main(int argc, char** argv) {
   RUN_TEST(test_tp_and_tpa_select_protocol_like_sp);
   RUN_TEST(test_atdp_and_atdpn_reflect_protocol_state);
   RUN_TEST(test_atdp_shows_auto_prefix_only_after_auto_search_success);
-  RUN_TEST(test_atsthh_sets_timeout_max_4_or_hhx4);
+  RUN_TEST(test_atsthh_sets_timeout_hhx4_and_st00_restores_default);
+  RUN_TEST(test_atctm5_multiplies_the_response_timeout);
+  RUN_TEST(test_atz_and_atd_return_to_the_protocol_saved_by_atsp);
+  RUN_TEST(test_attp_does_not_change_the_saved_protocol);
   RUN_TEST(test_atat_sets_adaptive_timing_mode);
   RUN_TEST(test_atctm_sets_timeout_multiplier);
   RUN_TEST(test_atpc_disconnects_and_leaves_monitor_mode);
   RUN_TEST(test_atsh_sets_standard_and_extended_header_and_rejects_out_of_range);
   RUN_TEST(test_atsh_accepts_6digit_shorthand_under_29bit_protocol);
-  RUN_TEST(test_atsh_rejects_6digit_shorthand_under_11bit_protocol);
+  RUN_TEST(test_atsh_6digit_set_before_atsp7_is_used_for_the_next_request);
+  RUN_TEST(test_atsh_6digit_under_11bit_protocol_uses_low_11_bits);
+  RUN_TEST(test_atsh_3digit_under_29bit_protocol_builds_a_29bit_id_with_priority);
+  RUN_TEST(test_atcp_changes_the_priority_of_a_29bit_header);
   RUN_TEST(test_atcp_sets_priority_bits);
   RUN_TEST(test_atcra_and_atar_clear_receive_address_and_filter);
   RUN_TEST(test_atcra_sets_exact_receive_address);
   RUN_TEST(test_atcf_and_atcm_set_filter_and_mask_independently);
   RUN_TEST(test_atcaf_and_atcfc_toggles);
   RUN_TEST(test_atfcsm_sets_flow_control_mode);
+  RUN_TEST(test_fcsm1_sends_flow_control_with_manual_header_and_data);
+  RUN_TEST(test_fcsm2_sends_manual_data_to_the_derived_header);
+  RUN_TEST(test_cfc0_suppresses_flow_control_even_in_manual_mode);
   RUN_TEST(test_atfcsh_sets_manual_flow_control_id);
   RUN_TEST(test_atfcsd_sets_manual_flow_control_bytes);
   RUN_TEST(test_atcea_atceahh_atcerhh);
@@ -448,7 +670,8 @@ int main(int argc, char** argv) {
   RUN_TEST(test_atcsm_toggles_silent_monitoring);
   RUN_TEST(test_atrtr_sends_remote_frame_with_current_header);
   RUN_TEST(test_atv_toggles_variable_dlc_flag);
-  RUN_TEST(test_atbd_reports_no_data_then_the_last_accepted_frame);
+  RUN_TEST(test_atbd_reports_no_data_then_the_last_request_and_accepted_frame);
+  RUN_TEST(test_atbd_after_no_data_shows_just_the_request);
   RUN_TEST(test_monitor_all_prints_every_frame);
   RUN_TEST(test_monitor_received_address_filters_by_low_byte);
   RUN_TEST(test_unsupported_commands_return_unknown_without_side_effects);

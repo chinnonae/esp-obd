@@ -13,6 +13,7 @@ class Esp32TwaiCanPort : public can::ICanPort {
   bool configure(const can::CanConfig& config) override;
   can::CanResult send(const can::CanFrame& frame, can::Milliseconds timeout) override;
   can::ReceiveResult receive() override;
+  void discardPending() override;
   can::CanStatus status() const override;
 
  private:

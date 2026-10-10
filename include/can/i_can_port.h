@@ -16,6 +16,10 @@ class ICanPort {
   // is computed by the caller from IClock and driven via poll(now). See
   // docs/ARCHITECTURE.md.
   virtual ReceiveResult receive() = 0;
+  // Drops every frame already waiting to be returned by receive(). Called
+  // right before a diagnostic request is transmitted, so a late reply to an
+  // earlier request can't be mistaken for a reply to this one.
+  virtual void discardPending() = 0;
   virtual CanStatus status() const = 0;
   virtual ~ICanPort() = default;
 };

@@ -77,18 +77,22 @@ std::optional<ElmReply> dispatchMonitoringCommand(ElmSession& session, const cha
   }
 
   if (eq(r, "BD")) {
-    if (!session.lastAcceptedReceivedFrame.has_value()) {
+    if (!session.lastTransmittedFrame.has_value() &&
+        !session.lastAcceptedReceivedFrame.has_value()) {
       return textReply(session, kNoDataText);
     }
-    // Raw dump, independent of the session's own ATH/ATD display settings.
-    // Simplification: shows only the last accepted RX frame, not the last
-    // TX frame the contract also asks for -- see this task's Notes.
-    const can::CanFrame& frame = *session.lastAcceptedReceivedFrame;
+    // Raw dump of the last request frame sent, then the last frame
+    // accepted, each as "ID DLC bytes" regardless of ATH/ATD.
     ElmSession dumpSession = session;
     dumpSession.headersEnabled = true;
     dumpSession.displayDlcEnabled = true;
-    ElmReplyText body =
-        formatResponseBody(dumpSession, frame, frame.data.data(), frame.dlc, frame.dlc);
+    ElmReplyText body;
+    for (const auto* frame : {&session.lastTransmittedFrame, &session.lastAcceptedReceivedFrame}) {
+      if (!frame->has_value()) continue;
+      if (!body.empty()) body += lineBreak(session);
+      const can::CanFrame& f = **frame;
+      body += formatResponseBody(dumpSession, f, f.data.data(), f.dlc, f.dlc).c_str();
+    }
     return textReply(session, body.c_str());
   }
 

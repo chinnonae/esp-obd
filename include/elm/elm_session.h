@@ -61,6 +61,9 @@ struct ElmSession {
 
   // --- T09: protocol and timeout (ATSP/ATTP/ATDP/ATDPN/ATST/ATAT/ATCTM/ATPC) ---
   ElmProtocol protocol = ElmProtocol::AutomaticSearch;
+  // ATSP's "save as new default": the protocol ATZ/ATD/ATWS return to.
+  // ATTP selects a protocol without changing this. Not persisted to NVS.
+  ElmProtocol savedProtocol = ElmProtocol::AutomaticSearch;
   bool protocolConnected = false;
   // ATDP/ATDPN's "AUTO, "/"A6".."A9" prefix applies only when the current
   // protocol was reached via auto-search, not a manual ATSP/ATTP.
@@ -71,8 +74,12 @@ struct ElmSession {
   uint8_t canTimeoutMultiplier = 1;  // ATCTM1/ATCTM5
 
   // --- T09: addressing and filtering (ATSH/ATCP/ATCRA/ATAR/ATCF/ATCM) ---
-  std::optional<uint32_t> customHeaderId;   // ATSH; unset by default
-  uint8_t priorityBits = 0x18;              // ATCPhh: 29-bit header priority
+  // ATSH, stored the way an ELM327 stores it: the three header bytes
+  // (xx yy zz), independent of the protocol in use. The CAN id is only built
+  // at transmit time -- see elm::requestCanIdFor() -- so a header set before
+  // ATSP still applies once the protocol changes. Unset by default.
+  std::optional<uint32_t> customHeader;
+  uint8_t priorityBits = 0x18;              // ATCPhh / ATSH's 8-digit form: 29-bit priority
   std::optional<uint32_t> receiveAddress;   // ATCRA/ATAR; cleared by default
   std::optional<can::CanFilter> idFilter;   // ATCF/ATCM; cleared by default
 
@@ -97,6 +104,7 @@ struct ElmSession {
   bool silentMonitoringEnabled = false;  // ATCSM0/1
   bool variableDlcEnabled = false;       // ATV0/1; false = V0 = fixed 8-byte frames,
                                           // matching T04/T05's current hardcoded padding
+  std::optional<can::CanFrame> lastTransmittedFrame;       // ATBD
   std::optional<can::CanFrame> lastAcceptedReceivedFrame;  // ATBD
 
   void resetToDefaults() { *this = ElmSession{}; }
@@ -107,12 +115,13 @@ inline bool operator==(const ElmSession& a, const ElmSession& b) {
          a.spacesEnabled == b.spacesEnabled && a.headersEnabled == b.headersEnabled &&
          a.displayDlcEnabled == b.displayDlcEnabled &&
          a.responsesEnabled == b.responsesEnabled && a.protocol == b.protocol &&
+         a.savedProtocol == b.savedProtocol &&
          a.protocolConnected == b.protocolConnected &&
          a.protocolDiscoveredViaAutoSearch == b.protocolDiscoveredViaAutoSearch &&
          a.requestId == b.requestId &&
          a.responseTimeoutMs == b.responseTimeoutMs && a.adaptiveTiming == b.adaptiveTiming &&
          a.canTimeoutMultiplier == b.canTimeoutMultiplier &&
-         a.customHeaderId == b.customHeaderId && a.priorityBits == b.priorityBits &&
+         a.customHeader == b.customHeader && a.priorityBits == b.priorityBits &&
          a.receiveAddress == b.receiveAddress && a.idFilter == b.idFilter &&
          a.automaticFormattingEnabled == b.automaticFormattingEnabled &&
          a.automaticFlowControlEnabled == b.automaticFlowControlEnabled &&
@@ -128,7 +137,7 @@ inline bool operator==(const ElmSession& a, const ElmSession& b) {
          a.monitorAddressByte == b.monitorAddressByte &&
          a.silentMonitoringEnabled == b.silentMonitoringEnabled &&
          a.variableDlcEnabled == b.variableDlcEnabled;
-  // lastAcceptedReceivedFrame is intentionally excluded: it's a
+  // lastTransmittedFrame/lastAcceptedReceivedFrame are intentionally excluded: they're a
   // diagnostic-transaction side effect, not a "setting" a malformed
   // command could be accused of mutating.
 }

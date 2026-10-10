@@ -54,6 +54,12 @@ struct RxConfig {
   bool flowControlIdIsExtendedCan = false;
   uint8_t flowControlBlockSize = 0;  // 0 = no limit; else re-arm FC every N CFs
   uint8_t flowControlStMin = 0;      // minimum separation we ask the sender for
+
+  // ATFCSD (used by ATFCSM1/2): when manualFlowControlDataLen > 0, the FC
+  // frame carries exactly these bytes (zero padded) instead of a generated
+  // "30 <block size> <STmin>".
+  std::array<uint8_t, 5> manualFlowControlData{};
+  uint8_t manualFlowControlDataLen = 0;
 };
 
 class IsoTpReceiver {

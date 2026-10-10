@@ -40,6 +40,13 @@ the prompt. Test the handler and transport separately.
 - During monitor mode, each received matching CAN frame is formatted as one
   line. Any received character stops monitoring, discards that character, and
   returns `STOPPED` with a normal ending and prompt.
+- The same applies to a diagnostic request still in progress: any received
+  character abandons it, is discarded, and produces `STOPPED`, ending and
+  prompt. If the reply had already arrived, the reply is sent first and the
+  character is handled as normal input.
+- After `ATZ`/`ATWS`, input that had already been received when the reset ran
+  (e.g. the `ATE0` in a single `ATZ\rATE0\r` write) is discarded, as a real
+  ELM327 loses it while restarting.
 - Bluetooth is the only ELM command transport. UART0 is debug-only. No line
   beginning with `#DBG:` may be sent to Bluetooth.
 
@@ -47,7 +54,7 @@ the prompt. Test the handler and transport separately.
 
 | State | Default |
 |---|---|
-| Identity | Value of `ELM_VERSION` (`ELM327 v2.2` at time of writing) |
+| Identity | Value of `ELM_VERSION` (`ELM327 v1.5`: what the reference adapter in the Car Scanner field log reports; a v2.x claim invites v2-only commands this adapter rejects) |
 | Echo | on |
 | Linefeeds | off |
 | Spaces | on |
@@ -58,7 +65,7 @@ the prompt. Test the handler and transport separately.
 | Allow long messages | off (`NL`) |
 | Responses | on (`R1`) |
 | Adaptive timing | mode 1 |
-| Protocol | automatic CAN-only search (`SP0`) |
+| Protocol | the protocol last saved by `ATSP` (initially automatic CAN-only search, `SP0`) |
 | Request CAN ID before a protocol is found | `7DF` |
 | Receive address, mask, filter | cleared |
 | Response timeout | `0x32 * 4 ms` (200 ms nominal) |
@@ -69,8 +76,8 @@ the prompt. Test the handler and transport separately.
 same configuration reset but returns `OK`. `ATWS` performs the reset, returns
 the identity string, and preserves neither protocol nor custom header.
 
-> The existing native test expecting `ELM327 v1.5` is stale. It must instead
-> assert the configured `ELM_VERSION`, or a test-only identity constant.
+Tests should assert the configured `ELM_VERSION` constant rather than spell
+out the identity string.
 
 ### 1.4 Formatting rules
 
@@ -79,13 +86,21 @@ the identity string, and preserves neither protocol nor custom header.
   not. There is never a trailing space.
 - `ATH0` + `CAF1` prints only the ISO-TP payload. A single-frame response
   `06 41 00 BE 1F B8 10 00` prints `41 00 BE 1F B8 10`.
+- `ATH0` + `CAF1` prints a multi-frame payload the way an ELM327 does: the
+  payload length as three hex digits on its own line, then one line per
+  frame prefixed with its index `0:`..`F:` (wrapping). A 20-byte VIN reply
+  prints `014`, `0: 49 02 01 31 48 47`, `1: 43 4D 38 32 36 33 33`,
+  `2: 41 30 30 34 33 35 32`. The final frame's padding bytes are not printed.
+- Lines within one response end with a single `\r` (`\r\n` with `ATL1`); the
+  last line is followed by the response ending, e.g.
+  `7E8 02 41 00\r7E9 02 41 00\r\r`.
 - `ATH1` prints CAN ID, optional DLC, then raw frame bytes. With `ATD0`, the
   same frame prints `7E8 06 41 00 BE 1F B8 10`; with `ATD1`, it prints
   `7E8 8 06 41 00 BE 1F B8 10 00`.
 - `CAF0` prints and transmits caller-supplied raw CAN data. It does not add or
   remove ISO-TP PCI bytes.
-- More than one complete responder to a functional request forces headers on
-  for that response, even if `ATH0` is selected, so sources remain distinct.
+- Several responders under `ATH0` print as plain un-headered lines, one per
+  responder, as on an ELM327. A client that must tell ECUs apart uses `ATH1`.
 - A silent bus produces `NO DATA`. A CAN transmit or driver failure produces
   `CAN ERROR`. A protocol auto-search that exhausts all four CAN protocols
   produces `UNABLE TO CONNECT`.
@@ -121,17 +136,30 @@ they do not assert that this ESP32 has the original ELM327 EEPROM layout.
 
 | Syntax | Required behaviour | Unit-test assertions |
 |---|---|---|
-| `ATSP0` | Select automatic CAN-only search. | `OK`; disconnected; next request tries `6`, `7`, `8`, `9` in that order. |
+| `ATSP0` | Select automatic CAN-only search and save it as the default. | `OK`; disconnected; next request tries `6`, `7`, `8`, `9` in that order. |
 | `ATSP6` | Select ISO 15765-4, 11-bit, 500 kbit/s. | `OK`; TWAI is 500 kbit/s; default request ID is `7DF`. |
 | `ATSP7` | Select ISO 15765-4, 29-bit, 500 kbit/s. | `OK`; TWAI is 500 kbit/s; default request ID is `18DB33F1`. |
 | `ATSP8` | Select ISO 15765-4, 11-bit, 250 kbit/s. | `OK`; TWAI is 250 kbit/s; default request ID is `7DF`. |
 | `ATSP9` | Select ISO 15765-4, 29-bit, 250 kbit/s. | `OK`; TWAI is 250 kbit/s; default request ID is `18DB33F1`. |
-| `ATTPx`, `ATTPAx` | Try one supported protocol, optionally falling back to auto search. | Same selection semantics as `SP`; no CAN until a data request. |
+| `ATTPx`, `ATTPAx` | Try one supported protocol, optionally falling back to auto search. | Same selection semantics as `SP`, but does not change the saved default; no CAN until a data request. |
 | `ATDP` | Describe selected/connected protocol. | Exact CAN protocol description; prefix `AUTO, ` only after automatic search connects. |
 | `ATDPN` | Return selected protocol number. | `0` while searching; `A6`..`A9` after auto connection; otherwise `6`..`9`. |
-| `ATSThh` | Set response timeout to `max(4, hh * 4)` milliseconds. | `OK`; valid range `00`..`FF`; malformed input changes nothing. |
-| `ATAT0`, `ATAT1`, `ATAT2` | Set adaptive timing mode. | `OK`; state is 0, 1, or 2. The request deadline never exceeds `ATST`. |
-| `ATCTM1`, `ATCTM5` | Set the CAN timeout multiplier to 1 or 5. | `OK`; request timeout uses the selected multiplier. |
+| `ATSThh` | Set response timeout to `hh * 4` milliseconds; `ATST00` restores the default (200 ms). | `OK`; valid range `00`..`FF`; malformed input changes nothing. |
+| `ATAT0`, `ATAT1`, `ATAT2` | Set adaptive timing mode (see below). | `OK`; state is 0, 1, or 2. The wait never exceeds `ATST` x `ATCTM`. |
+| `ATCTM1`, `ATCTM5` | Set the CAN timeout multiplier to 1 or 5. | `OK`; the response timeout is `ATST` x the multiplier. |
+
+`ATSP6`-`9` and `ATSP0` also save the protocol as the default that `ATZ`,
+`ATD` and `ATWS` return to (in RAM only; it is not written to NVS).
+
+Response timing: the first response is awaited for the full timeout
+(`ATST` x `ATCTM`), and the timer restarts after every accepted frame, as on
+an ELM327. With `ATAT1`/`ATAT2`, once some earlier request has received
+responses, the wait after a response is shortened to about how long the
+slowest recent responder took after transmission (`AT1`: 2x, at least 20 ms
+after the latest frame; `AT2`: 1.5x, at least 8 ms). An ECU that has never
+answered within that window can therefore be missed in adaptive mode; use
+`ATAT0` or a response-count digit if that matters. Collection never ends
+while a multi-frame response is still arriving.
 | `ATPC` | Close current protocol and leave monitor mode. | `OK`; protocol remains selected but disconnected; no driver uninstall required. |
 
 `ATSP1` through `ATSP5`, `ATSP A` through `ATSP C`, and their `TP` forms
@@ -141,17 +169,22 @@ return `?`. They must not be accepted and later fail on the first request.
 
 | Syntax | Required behaviour | Unit-test assertions |
 |---|---|---|
-| `ATSHhhh` | Set an 11-bit transmit CAN ID. | `OK`; reject values above `7FF`; next TX uses this standard ID. |
-| `ATSHhhhhhh` | Set a 29-bit transmit CAN ID from its low 3 bytes, prepending the standard `18` priority byte (`0x18hhhhhh`). Only valid while a 29-bit protocol is selected. | `OK` under `ATSP7`/`ATSP9`; `?` with no state change under an 11-bit protocol; next TX has extended-ID flag. |
-| `ATSHhhhhhhhh` | Set a 29-bit transmit CAN ID. | `OK`; reject values above `1FFFFFFF`; next TX has extended-ID flag. |
-| `ATCPhh` | Set the five priority bits used with a 29-bit header. | `OK`; changing priority changes only the applicable ID bits. |
+| `ATSHhhh` | Set header bytes `00 0h hh`. | `OK`; reject values above `7FF`; next 11-bit TX uses `hhh`; next 29-bit TX uses priority + `000hhh`. |
+| `ATSHhhhhhh` | Set header bytes `hh hh hh`. Accepted in any protocol state (scanner apps send it before `ATSP7`). | `OK` under `ATSP0`/`6`-`9`; 29-bit TX is priority + `hhhhhh` (`0x18hhhhhh` by default); 11-bit TX uses the low 11 bits. |
+| `ATSHhhhhhhhh` | Set the priority bits (first byte, low 5 bits) and header bytes (last 3). | `OK`; reject values above `1FFFFFFF`; 29-bit TX is exactly `hhhhhhhh`; 11-bit TX uses the low 11 bits. |
+| `ATCPhh` | Set the five priority bits used with a 29-bit header. | `OK`; changing priority changes only the applicable ID bits of the next 29-bit TX. |
+
+The CAN ID is built from the stored header at transmit time, from the
+protocol actually in use, so a header set before `ATSP`, or before an
+auto-search connects, still applies afterwards. During an auto-search
+itself, requests go to the functional ID (as on an ELM327).
 | `ATCRA` / `ATAR` | Clear explicit receive address and CAN mask/filter. | `OK`; default OBD response range applies. |
 | `ATCRAxxx` / `ATCRAxxxxxxxx` | Set one exact receive CAN ID. | `OK`; non-matching frames are ignored. |
 | `ATCFxxx` / `ATCFxxxxxxxx` | Set CAN ID filter. | `OK`; pairs with current mask. |
 | `ATCMxxx` / `ATCMxxxxxxxx` | Set CAN ID mask. | `OK`; a frame is accepted iff `(id & mask) == (filter & mask)`. |
 | `ATCAF0` / `ATCAF1` | Disable / enable automatic ISO-TP formatting. | `OK`; `CAF1` creates/removes PCI; `CAF0` preserves raw data. |
 | `ATCFC0` / `ATCFC1` | Disable / enable automatic ISO-TP flow control. | `OK`; a received First Frame creates no FC with CFC0 and one FC with CFC1. |
-| `ATFCSM0` / `ATFCSM1` / `ATFCSM2` | Set flow-control mode: automatic / user header+data / user data with derived header. | `OK`; state persists; mode is used at next First Frame. |
+| `ATFCSM0` / `ATFCSM1` / `ATFCSM2` | Set flow-control mode: automatic / user header+data / user data with derived header. `FCSM1` requires `ATFCSH` and `ATFCSD` to be set first, `FCSM2` requires `ATFCSD`. | `OK`, or `?` with no change if the required values are missing; the next First Frame's Flow Control uses the `ATFCSH` id (`FCSM1`) and exactly the `ATFCSD` bytes, zero padded (`FCSM1`/`FCSM2`). `ATCFC0` still suppresses Flow Control. |
 | `ATFCSHhhh` / `ATFCSHhhhhhhhh` | Set the CAN ID for manual flow-control frames. | `OK`; FC uses this ID in manual-header mode. |
 | `ATFCSD[1..5 bytes]` | Set manual FC payload bytes. | `OK`; remainder is zero padded; FC output begins with supplied bytes. |
 | `ATCEA` | Disable CAN extended addressing. | `OK`; payload begins with PCI. |
@@ -189,8 +222,10 @@ requests, etc.) — a payload transmits exactly as it would on a real ELM327.
 | Payload length 1..7, `CAF1` | Send ISO-TP Single Frame with PCI equal to payload length and zero padding. | `010C` on `7DF` transmits `02 01 0C 00 00 00 00 00`. |
 | Payload length 8..4095, `CAF1` | Send First Frame, wait for valid Flow Control, then send Consecutive Frames with sequence numbers 1..15 wrapping to 0. | Frame IDs, PCI, sequence, block size, STmin, timeout and padding are exact. |
 | `CAF0` | Transmit caller supplied raw CAN data, up to eight bytes. | Input does not gain PCI or altered payload bytes. |
-| Functional request | Collect responses from up to eight ECUs until timeout or requested response count. | Multiple source IDs print as distinct headered lines. |
+| Functional request | Collect responses from up to eight ECUs until timeout or requested response count. | Each responder prints on its own line; with `ATH1` each line carries its source ID. |
 | Physical request | Stop after its first complete accepted response unless an explicit response count is requested. | A second ECU response is ignored. |
+| "Response pending" (`7F xx 78`) | Not a complete response and not printed: keep that ECU's receiver open for its real answer and extend the deadline to at least 5000 ms (ISO 14229 P2*) from the pending reply. | `22F190` answered by `7F 22 78` then `62 F1 90 ..` 300 ms later prints only the positive response; with no follow-up, `NO DATA` after P2*. |
+| Stale frames | Frames already waiting in the receive queue when a request starts are discarded before it is transmitted. | A late reply from a second ECU to `010C1` is not returned for the following `010D1`. |
 | Single-frame response | Decode PCI and print payload in `CAF1`/`ATH0`. | Padding is not printed. |
 | Multi-frame response | Reassemble to declared length, validate CF sequence, and send an FC according to CFC/FCS settings. | No partial payload is printed as a complete response. |
 | `ATH1` response | Print the actual raw received CAN frame(s), including PCI. | A First Frame and each CF are separate lines. |
@@ -252,20 +287,27 @@ tests, including multi-frame request transmission and reception, and `ATRV`/
 faked. A handful of narrower gaps remain, tracked in the relevant task files'
 own Notes rather than duplicated here:
 
-- Manual flow-control modes (`ATFCSM1`/`ATFCSM2`) and manual FC bytes
-  (`ATFCSH`/`ATFCSD`) are accepted and stored but not yet injected into an
-  outgoing Flow Control frame -- see [T09](tasks/09-can-commands-and-monitoring.md).
-- `ATCPhh`'s priority bits are stored but not yet applied to a constructed
-  29-bit request ID (T09).
 - `ATV0`/`ATV1` is stored but doesn't change wire format: frames are always
   padded to 8 bytes (T04/T05, T09).
-- `ATBD` returns only the last accepted RX frame, not "last TX and accepted
-  RX" (T09).
+- `ATRV` still returns `?`: the board has no confirmed battery-voltage input.
+  Car Scanner polls it repeatedly (see the 2026-09-05 field log); a real
+  reading needs a voltage divider on OBD pin 16 to an ADC pin first.
 - `ATSH` accepts the 6-hex-digit 29-bit shorthand (`ATSHhhhhhh` ->
   `0x18hhhhhh`) that scanner apps use to retarget UDS requests at a
   specific ECU, in addition to the 3-digit and 8-digit forms, as of T12
   (found via field-log comparison against a genuine adapter on
-  2026-08-29 -- see [T12](tasks/12-atsh-6digit-header.md)).
+  2026-08-29 -- see [T12](tasks/12-atsh-6digit-header.md)). Since the
+  WiCAN comparison (2026-10-10) it is accepted in any protocol state, and
+  the header is stored ELM-style (3 bytes + `ATCP` priority) so `ATCP` now
+  applies.
+- Also since the WiCAN comparison: input during a running request produces
+  `STOPPED`; input buffered with `ATZ` is discarded; `ATSP` sets the
+  `ATZ`/`ATD` default; `ATCTM` and adaptive timing take effect; `ATST00`
+  restores the default; several responders no longer force headers on.
+- Since the WiCAN comparison (2026-10-10): `ATH0` multi-frame responses use
+  the ELM327 length-line + `0:`/`1:` layout, response-pending (`7F xx 78`)
+  replies extend the wait instead of ending it, and stale RX frames are
+  discarded before each request.
 - T07's ESP32 platform adapters (TWAI, NVS) and T08's Bluetooth/UART
   transports were exercised against a real board, a scanner app, and a
   live vehicle on 2026-08-28 (multi-ECU `0100`, a complete multi-frame VIN

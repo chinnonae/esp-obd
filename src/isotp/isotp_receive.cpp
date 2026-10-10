@@ -32,8 +32,14 @@ void IsoTpReceiver::sendFlowControl(FlowStatus status) {
     data[0] = config_.transmitExtendedAddressByte;
     offset = 1;
   }
-  buildFlowControlPci(data.data() + offset, status, config_.flowControlBlockSize,
-                       config_.flowControlStMin);
+  if (config_.manualFlowControlDataLen > 0) {
+    std::copy(config_.manualFlowControlData.begin(),
+              config_.manualFlowControlData.begin() + config_.manualFlowControlDataLen,
+              data.begin() + offset);
+  } else {
+    buildFlowControlPci(data.data() + offset, status, config_.flowControlBlockSize,
+                        config_.flowControlStMin);
+  }
 
   // Padded to a full 8-byte classical CAN frame, matching the padding
   // convention shown throughout docs/ELM_COMMAND_BEHAVIOR.md's examples.

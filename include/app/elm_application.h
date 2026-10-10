@@ -38,6 +38,10 @@ class ElmApplication {
   bool poll(can::Milliseconds now);
 
   bool diagnosticPending() const { return diagnosticPending_; }
+
+  // Abandons the in-flight diagnostic transaction without a reply (the
+  // client interrupted it -- see ElmBluetoothSession). No-op when idle.
+  void abortDiagnostic();
   elm::ElmReply takeDiagnosticReply() const { return readyReply_; }
 
   bool monitorActive() const { return engine_.session().monitorActive; }

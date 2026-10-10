@@ -9,7 +9,10 @@ namespace esp_obd::build {
 inline constexpr char kFirmwareVersion[] = "0.1.0";
 
 // Returned by ATZ/ATI. See docs/ELM_COMMAND_BEHAVIOR.md sections 1.3, 2.1.
-inline constexpr char kElmVersion[] = "ELM327 v2.2";
+// v1.5, not v2.x: it is what the reference adapter in the Car Scanner field
+// log reports, and claiming v2.x invites apps to send v2-only commands this
+// adapter answers with "?".
+inline constexpr char kElmVersion[] = "ELM327 v1.5";
 
 // Fixed AT@1 response text.
 inline constexpr char kAdapterDescription[] = "ESP-OBD CAN Adapter";

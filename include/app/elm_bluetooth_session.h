@@ -28,6 +28,17 @@ class ElmBluetoothSession {
 
   // Feeds one received byte. Returns whatever should be written back to
   // the Bluetooth client (may be empty).
+  //
+  // A byte that arrives while a diagnostic request is still running
+  // interrupts it, as on an ELM327: the request is abandoned, "STOPPED" is
+  // returned, and the byte is discarded (like the byte that stops monitor
+  // mode). If the reply had in fact already arrived, it is returned first
+  // and the byte is handled normally.
+  //
+  // After ATZ/ATWS, bytes are discarded until the next poll(): the caller
+  // feeds every byte it already has before polling, so this drops exactly
+  // the input that was received before the reset reply went out (e.g. a
+  // client sending "ATZ\rATE0\r" in one write gets only the ATZ reply).
   TransportOutput onByte(can::Milliseconds now, uint8_t byte);
 
   // Advances line-idle timeout tracking and any in-flight diagnostic
@@ -46,6 +57,7 @@ class ElmBluetoothSession {
 
   ElmApplication& app_;
   LineReader lineReader_;
+  bool discardUntilPoll_ = false;  // set by ATZ/ATWS
 };
 
 }  // namespace esp_obd::app

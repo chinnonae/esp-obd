@@ -33,7 +33,7 @@ static void assertSessionIsDefault(const ElmSession& s) {
   TEST_ASSERT_FALSE(s.receiveAddress.has_value());
   TEST_ASSERT_FALSE(s.idFilter.has_value());
   TEST_ASSERT_EQUAL_UINT32(200, s.responseTimeoutMs);
-  TEST_ASSERT_FALSE(s.customHeaderId.has_value());
+  TEST_ASSERT_FALSE(s.customHeader.has_value());
   TEST_ASSERT_FALSE(s.extendedAddressingEnabled);
   TEST_ASSERT_FALSE(s.monitorActive);
 

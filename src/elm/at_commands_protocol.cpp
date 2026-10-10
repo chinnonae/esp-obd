@@ -45,37 +45,36 @@ const char* protocolDescriptionText(ElmProtocol protocol) {
   }
 }
 
-std::optional<ElmReply> selectProtocol(ElmSession& session, ElmProtocol protocol) {
-  session.protocol = protocol;
-  session.protocolConnected = true;
-  session.protocolDiscoveredViaAutoSearch = false;
-  session.requestId = can::obd::functionalRequestId(*toObdCanProtocol(protocol));
+// ATSP: select and save as the new default.
+std::optional<ElmReply> setProtocol(ElmSession& session, ElmProtocol protocol) {
+  applyProtocol(session, protocol);
+  session.savedProtocol = protocol;
+  return textReply(session, kOkText);
+}
+
+// ATTP: select for now only; ATZ returns to the saved default.
+std::optional<ElmReply> tryProtocol(ElmSession& session, ElmProtocol protocol) {
+  applyProtocol(session, protocol);
   return textReply(session, kOkText);
 }
 
 }  // namespace
 
 std::optional<ElmReply> dispatchProtocolCommand(ElmSession& session, const char* r) {
-  if (eq(r, "SP0")) {
-    session.protocol = ElmProtocol::AutomaticSearch;
-    session.protocolConnected = false;
-    session.protocolDiscoveredViaAutoSearch = false;
-    session.requestId = 0x7DF;
-    return textReply(session, kOkText);
-  }
-  if (eq(r, "SP6")) return selectProtocol(session, ElmProtocol::Iso15765_11bit_500k);
-  if (eq(r, "SP7")) return selectProtocol(session, ElmProtocol::Iso15765_29bit_500k);
-  if (eq(r, "SP8")) return selectProtocol(session, ElmProtocol::Iso15765_11bit_250k);
-  if (eq(r, "SP9")) return selectProtocol(session, ElmProtocol::Iso15765_29bit_250k);
+  if (eq(r, "SP0")) return setProtocol(session, ElmProtocol::AutomaticSearch);
+  if (eq(r, "SP6")) return setProtocol(session, ElmProtocol::Iso15765_11bit_500k);
+  if (eq(r, "SP7")) return setProtocol(session, ElmProtocol::Iso15765_29bit_500k);
+  if (eq(r, "SP8")) return setProtocol(session, ElmProtocol::Iso15765_11bit_250k);
+  if (eq(r, "SP9")) return setProtocol(session, ElmProtocol::Iso15765_29bit_250k);
 
   // ATTPx / ATTPAx: same selection semantics as ATSP for the in-scope
   // protocols (docs/ELM_COMMAND_BEHAVIOR.md section 2.2). The 'A' variant's
   // "optionally falling back to auto search" nuance isn't separately
   // modeled: both just select the concrete protocol immediately.
-  if (eq(r, "TP6") || eq(r, "TPA6")) return selectProtocol(session, ElmProtocol::Iso15765_11bit_500k);
-  if (eq(r, "TP7") || eq(r, "TPA7")) return selectProtocol(session, ElmProtocol::Iso15765_29bit_500k);
-  if (eq(r, "TP8") || eq(r, "TPA8")) return selectProtocol(session, ElmProtocol::Iso15765_11bit_250k);
-  if (eq(r, "TP9") || eq(r, "TPA9")) return selectProtocol(session, ElmProtocol::Iso15765_29bit_250k);
+  if (eq(r, "TP6") || eq(r, "TPA6")) return tryProtocol(session, ElmProtocol::Iso15765_11bit_500k);
+  if (eq(r, "TP7") || eq(r, "TPA7")) return tryProtocol(session, ElmProtocol::Iso15765_29bit_500k);
+  if (eq(r, "TP8") || eq(r, "TPA8")) return tryProtocol(session, ElmProtocol::Iso15765_11bit_250k);
+  if (eq(r, "TP9") || eq(r, "TPA9")) return tryProtocol(session, ElmProtocol::Iso15765_29bit_250k);
 
   if (eq(r, "DP")) {
     ElmReplyText body;
@@ -101,8 +100,9 @@ std::optional<ElmReply> dispatchProtocolCommand(ElmSession& session, const char*
   if (std::strncmp(r, "ST", 2) == 0) {
     auto value = parseFixedWidthHex(r + 2, 2);
     if (!value.has_value()) return std::nullopt;
-    can::Milliseconds timeout = static_cast<can::Milliseconds>(*value) * 4;
-    session.responseTimeoutMs = timeout < 4 ? 4 : timeout;
+    // ST00 does not mean "0 ms": it restores the default, as on an ELM327.
+    session.responseTimeoutMs = *value == 0 ? ElmSession{}.responseTimeoutMs
+                                            : static_cast<can::Milliseconds>(*value) * 4;
     return textReply(session, kOkText);
   }
 

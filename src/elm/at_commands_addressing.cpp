@@ -13,11 +13,6 @@ namespace {
 
 bool eq(const char* a, const char* b) { return std::strcmp(a, b) == 0; }
 
-bool isElmProtocol29Bit(ElmProtocol protocol) {
-  return protocol == ElmProtocol::Iso15765_29bit_500k ||
-         protocol == ElmProtocol::Iso15765_29bit_250k;
-}
-
 // A CAN id argument is either exactly 3 hex digits (11-bit, <= 0x7FF) or
 // exactly 8 hex digits (29-bit, <= 0x1FFFFFFF). Shared by ATSH and ATFCSH.
 std::optional<uint32_t> parseCanIdArgument(const char* text) {
@@ -35,26 +30,42 @@ std::optional<uint32_t> parseCanIdArgument(const char* text) {
   return std::nullopt;
 }
 
-// ATSH-only: some scanner apps address a 29-bit bus with the 6-hex-digit
-// shorthand for the low 3 bytes of the 29-bit id (e.g. "DA11F1"), relying on
-// the adapter to prepend the standard `18` priority byte -> 0x18DA11F1. Only
-// meaningful once a 29-bit protocol is selected; a 3-byte value is always
-// <= 0x1FFFFFFF once OR'd with 0x18000000, so no extra range check is needed.
-std::optional<uint32_t> parseShorthand29BitHeader(const char* text, ElmProtocol protocol) {
-  if (std::strlen(text) != 6 || !isElmProtocol29Bit(protocol)) return std::nullopt;
-  auto value = parseFixedWidthHex(text, 6);
-  if (!value.has_value()) return std::nullopt;
-  return 0x18000000u | *value;
+// ATSH accepts 3, 6 or 8 hex digits in any protocol state, like an ELM327:
+//   xyz       -> header bytes 00 0x yz (rejected above 0x7FF)
+//   xxyyzz    -> header bytes xx yy zz
+//   wwxxyyzz  -> header bytes xx yy zz, and ww's low 5 bits become the
+//                29-bit priority (as ATCP would set them)
+// Scanner apps commonly send the 6-digit form before ATSP7, so it must not
+// depend on the currently selected protocol.
+bool applyHeaderArgument(ElmSession& session, const char* text) {
+  size_t len = std::strlen(text);
+  if (len == 3) {
+    auto value = parseFixedWidthHex(text, 3);
+    if (!value.has_value() || !can::isValidStandardId(*value)) return false;
+    session.customHeader = *value;
+    return true;
+  }
+  if (len == 6) {
+    auto value = parseFixedWidthHex(text, 6);
+    if (!value.has_value()) return false;
+    session.customHeader = *value;
+    return true;
+  }
+  if (len == 8) {
+    auto value = parseFixedWidthHex(text, 8);
+    if (!value.has_value() || !can::isValidExtendedId(*value)) return false;
+    session.priorityBits = static_cast<uint8_t>(*value >> 24);
+    session.customHeader = *value & 0xFFFFFF;
+    return true;
+  }
+  return false;
 }
 
 }  // namespace
 
 std::optional<ElmReply> dispatchAddressingCommand(ElmSession& session, const char* r) {
   if (std::strncmp(r, "SH", 2) == 0) {
-    auto id = parseCanIdArgument(r + 2);
-    if (!id.has_value()) id = parseShorthand29BitHeader(r + 2, session.protocol);
-    if (!id.has_value()) return std::nullopt;
-    session.customHeaderId = *id;
+    if (!applyHeaderArgument(session, r + 2)) return std::nullopt;
     return textReply(session, kOkText);
   }
 
@@ -101,8 +112,20 @@ std::optional<ElmReply> dispatchAddressingCommand(ElmSession& session, const cha
   if (eq(r, "CFC1")) { session.automaticFlowControlEnabled = true; return textReply(session, kOkText); }
 
   if (eq(r, "FCSM0")) { session.flowControlMode = FlowControlMode::Automatic; return textReply(session, kOkText); }
-  if (eq(r, "FCSM1")) { session.flowControlMode = FlowControlMode::ManualHeaderAndData; return textReply(session, kOkText); }
-  if (eq(r, "FCSM2")) { session.flowControlMode = FlowControlMode::ManualDataAutoHeader; return textReply(session, kOkText); }
+  // Manual modes need their inputs first: FCSM1 the ATFCSH id and ATFCSD
+  // bytes, FCSM2 the ATFCSD bytes. Otherwise "?" and no change.
+  if (eq(r, "FCSM1")) {
+    if (!session.manualFlowControlId.has_value() || session.manualFlowControlDataLen == 0) {
+      return std::nullopt;
+    }
+    session.flowControlMode = FlowControlMode::ManualHeaderAndData;
+    return textReply(session, kOkText);
+  }
+  if (eq(r, "FCSM2")) {
+    if (session.manualFlowControlDataLen == 0) return std::nullopt;
+    session.flowControlMode = FlowControlMode::ManualDataAutoHeader;
+    return textReply(session, kOkText);
+  }
 
   if (std::strncmp(r, "FCSH", 4) == 0) {
     auto id = parseCanIdArgument(r + 4);

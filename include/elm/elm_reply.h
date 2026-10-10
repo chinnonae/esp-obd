@@ -25,6 +25,10 @@ struct ElmReply {
   ElmReplyText text;
   bool appendPrompt = true;
   std::optional<uint8_t> diagnosticMaxResponses;  // only for DiagnosticRequest
+  // ATZ/ATWS: the adapter "reset". Input already received when the reset
+  // ran is discarded, as a real ELM327 loses it while restarting -- see
+  // app::ElmBluetoothSession.
+  bool resetPerformed = false;
 };
 
 }  // namespace esp_obd::elm

@@ -5,6 +5,7 @@
 #include "core/build_info.h"
 #include "elm/elm_errors.h"
 #include "elm/elm_formatter.h"
+#include "elm/protocol_mapping.h"
 
 namespace esp_obd::elm {
 
@@ -13,16 +14,14 @@ bool eq(const char* a, const char* b) { return std::strcmp(a, b) == 0; }
 }  // namespace
 
 std::optional<ElmReply> dispatchCoreCommand(ElmSession& session, const char* r) {
-  if (eq(r, "Z")) {
-    session.resetToDefaults();
-    return textReply(session, esp_obd::build::kElmVersion);
-  }
-  if (eq(r, "WS")) {
-    session.resetToDefaults();
-    return textReply(session, esp_obd::build::kElmVersion);
+  if (eq(r, "Z") || eq(r, "WS")) {
+    resetToDefaultsKeepingSavedProtocol(session);
+    ElmReply reply = textReply(session, esp_obd::build::kElmVersion);
+    reply.resetPerformed = true;
+    return reply;
   }
   if (eq(r, "D")) {
-    session.resetToDefaults();
+    resetToDefaultsKeepingSavedProtocol(session);
     return textReply(session, kOkText);
   }
   if (eq(r, "I")) {

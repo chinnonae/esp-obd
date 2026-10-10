@@ -1,5 +1,7 @@
 #include <unity.h>
 
+#include <string>
+
 #include "../../support/fake_can_port.h"
 #include "../../support/in_memory_settings_store.h"
 #include "app/elm_application.h"
@@ -16,7 +18,7 @@ void test_constructs_from_adapters_and_executes_at_commands() {
   app::ElmApplication application(port, store);
 
   elm::ElmReply reply = application.execute(0, "ATI");
-  TEST_ASSERT_EQUAL_STRING("ELM327 v2.2\r\r", reply.text.c_str());
+  TEST_ASSERT_EQUAL_STRING("ELM327 v1.5\r\r", reply.text.c_str());
   TEST_ASSERT_FALSE(application.diagnosticPending());
 }
 
@@ -178,10 +180,121 @@ void test_headers_on_shows_every_raw_frame_for_a_multi_frame_vin_response() {
   TEST_ASSERT_TRUE(app.poll(20));
 
   TEST_ASSERT_EQUAL_STRING(
-      "7E8 10 14 49 02 01 31 48 47\r\r"
-      "7E8 21 43 4D 38 32 36 33 33\r\r"
+      "7E8 10 14 49 02 01 31 48 47\r"
+      "7E8 21 43 4D 38 32 36 33 33\r"
       "7E8 22 41 30 30 34 33 35 32\r\r",
       app.takeDiagnosticReply().text.c_str());
+}
+
+// --- Headers off: multi-frame responses use the ELM327 "0:/1:" layout ------
+
+namespace {
+void queueVinResponse(FakeCanPort& port) {
+  // "49 02 01" + ASCII "1HGCM82633A004352" = 20-byte payload, FF + 2 CF.
+  port.queueRx(*makeStandardFrame(0x7E8, {0x10, 0x14, 0x49, 0x02, 0x01, 0x31, 0x48, 0x47}, 8));
+  port.queueRx(*makeStandardFrame(0x7E8, {0x21, 0x43, 0x4D, 0x38, 0x32, 0x36, 0x33, 0x33}, 8));
+  port.queueRx(*makeStandardFrame(0x7E8, {0x22, 0x41, 0x30, 0x30, 0x34, 0x33, 0x35, 0x32}, 8));
+}
+
+std::string runToCompletion(app::ElmApplication& app, const char* request) {
+  app.execute(0, request);
+  for (Milliseconds t = 1; app.diagnosticPending() && t < 1000; ++t) {
+    app.poll(t);
+  }
+  return app.takeDiagnosticReply().text.c_str();
+}
+}  // namespace
+
+void test_headers_off_multi_frame_response_uses_elm327_line_layout() {
+  FakeCanPort port;
+  InMemorySettingsStore store;
+  app::ElmApplication app(port, store);
+  app.execute(0, "ATSH7E0");
+  queueVinResponse(port);
+
+  TEST_ASSERT_EQUAL_STRING(
+      "014\r"
+      "0: 49 02 01 31 48 47\r"
+      "1: 43 4D 38 32 36 33 33\r"
+      "2: 41 30 30 34 33 35 32\r\r",
+      runToCompletion(app, "09021").c_str());
+}
+
+void test_headers_off_multi_frame_layout_follows_spaces_and_linefeeds() {
+  FakeCanPort port;
+  InMemorySettingsStore store;
+  app::ElmApplication app(port, store);
+  app.execute(0, "ATSH7E0");
+  app.execute(0, "ATS0");
+  app.execute(0, "ATL1");
+  queueVinResponse(port);
+
+  TEST_ASSERT_EQUAL_STRING(
+      "014\r\n"
+      "0:490201314847\r\n"
+      "1:434D3832363333\r\n"
+      "2:41303034333532\r\n\r\n",
+      runToCompletion(app, "09021").c_str());
+}
+
+void test_headers_off_multi_frame_layout_omits_final_frame_padding() {
+  FakeCanPort port;
+  InMemorySettingsStore store;
+  app::ElmApplication app(port, store);
+  app.execute(0, "ATSH7E0");
+  // 10-byte payload: FF carries 6, the single CF carries the last 4 + 3 pad.
+  port.queueRx(*makeStandardFrame(0x7E8, {0x10, 0x0A, 0x62, 0xF1, 0x90, 0x01, 0x02, 0x03}, 8));
+  port.queueRx(*makeStandardFrame(0x7E8, {0x21, 0x04, 0x05, 0x06, 0x07, 0xAA, 0xAA, 0xAA}, 8));
+
+  TEST_ASSERT_EQUAL_STRING(
+      "00A\r"
+      "0: 62 F1 90 01 02 03\r"
+      "1: 04 05 06 07\r\r",
+      runToCompletion(app, "22F1901").c_str());
+}
+
+void test_two_single_frame_responders_are_separated_by_one_line_break() {
+  FakeCanPort port;
+  InMemorySettingsStore store;
+  app::ElmApplication app(port, store);
+  app.execute(0, "ATSP6");
+  app.execute(0, "ATH1");
+  port.queueRx(*makeStandardFrame(0x7E8, {0x02, 0x41, 0x00, 0, 0, 0, 0, 0}, 8));
+  port.queueRx(*makeStandardFrame(0x7E9, {0x02, 0x41, 0x00, 0, 0, 0, 0, 0}, 8));
+
+  TEST_ASSERT_EQUAL_STRING("7E8 02 41 00\r7E9 02 41 00\r\r",
+                           runToCompletion(app, "01002").c_str());
+}
+
+void test_two_responders_under_ath0_print_without_headers() {
+  FakeCanPort port;
+  InMemorySettingsStore store;
+  app::ElmApplication app(port, store);
+  app.execute(0, "ATSP6");
+  port.queueRx(*makeStandardFrame(0x7E8, {0x06, 0x41, 0x00, 0xBE, 0x3F, 0xA8, 0x13, 0}, 8));
+  port.queueRx(*makeStandardFrame(0x7E9, {0x06, 0x41, 0x00, 0x98, 0x18, 0x00, 0x01, 0}, 8));
+
+  TEST_ASSERT_EQUAL_STRING("41 00 BE 3F A8 13\r41 00 98 18 00 01\r\r",
+                           runToCompletion(app, "01002").c_str());
+}
+
+// --- Stale frames from an earlier request are discarded ---------------------
+
+// "010C1" stops at the first responder; a second ECU's reply arrives after
+// that and is still queued when "010D1" starts. It must not be returned as
+// the speed reading.
+void test_late_reply_to_previous_request_is_not_returned_for_the_next_one() {
+  FakeCanPort port;
+  InMemorySettingsStore store;
+  app::ElmApplication app(port, store);
+  app.execute(0, "ATSP6");
+
+  port.queueRx(*makeStandardFrame(0x7E8, {0x04, 0x41, 0x0C, 0x1A, 0xF8, 0, 0, 0}, 8));
+  port.queueRx(*makeStandardFrame(0x7E9, {0x04, 0x41, 0x0C, 0x1A, 0xF8, 0, 0, 0}, 8));
+  TEST_ASSERT_EQUAL_STRING("41 0C 1A F8\r\r", runToCompletion(app, "010C1").c_str());
+
+  port.queueRx(*makeStandardFrame(0x7E8, {0x03, 0x41, 0x0D, 0x32, 0, 0, 0, 0}, 8));
+  TEST_ASSERT_EQUAL_STRING("41 0D 32\r\r", runToCompletion(app, "010D1").c_str());
 }
 
 int main(int argc, char** argv) {
@@ -196,5 +309,11 @@ int main(int argc, char** argv) {
   RUN_TEST(test_headers_on_atd0_trims_padding_for_single_frame_response);
   RUN_TEST(test_headers_on_atd1_shows_full_raw_frame_including_padding);
   RUN_TEST(test_headers_on_shows_every_raw_frame_for_a_multi_frame_vin_response);
+  RUN_TEST(test_headers_off_multi_frame_response_uses_elm327_line_layout);
+  RUN_TEST(test_headers_off_multi_frame_layout_follows_spaces_and_linefeeds);
+  RUN_TEST(test_headers_off_multi_frame_layout_omits_final_frame_padding);
+  RUN_TEST(test_two_single_frame_responders_are_separated_by_one_line_break);
+  RUN_TEST(test_late_reply_to_previous_request_is_not_returned_for_the_next_one);
+  RUN_TEST(test_two_responders_under_ath0_print_without_headers);
   return UNITY_END();
 }

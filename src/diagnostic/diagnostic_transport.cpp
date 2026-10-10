@@ -18,6 +18,7 @@ void DiagnosticTransport::start(can::Milliseconds now, const DiagnosticRequest& 
   result_ = DiagnosticResult{};
   effectiveMaxResponses_ = request_.maxResponses.value_or(
       isFunctionalRequest(request_.requestId, protocol) ? kMaxResponders : 1);
+  port_.discardPending();
   beginAttempt(now, protocol);
 }
 
@@ -43,6 +44,7 @@ void DiagnosticTransport::startAutoSearch(can::Milliseconds now, const Diagnosti
     finishWithOutcome(DiagnosticOutcome::BusError);
     return;
   }
+  port_.discardPending();
   beginAttempt(now, first);
 }
 
@@ -52,6 +54,9 @@ void DiagnosticTransport::beginAttempt(can::Milliseconds now, can::obd::ObdCanPr
   for (auto& r : receivers_) {
     r.reset();
   }
+  responsePending_.fill(false);
+  pendingDeadline_ = 0;
+  slowestResponderStartMs_ = 0;
 
   isotp::TxConfig txConfig;
   txConfig.id = request_.requestId;
@@ -62,7 +67,8 @@ void DiagnosticTransport::beginAttempt(can::Milliseconds now, can::obd::ObdCanPr
   txConfig.sendTimeoutMs = request_.responseTimeoutMs;
   txConfig.flowControlTimeoutMs = request_.responseTimeoutMs;
 
-  transmitter_.emplace(port_, txConfig);
+  requestRecorder_.clear();
+  transmitter_.emplace(requestRecorder_, txConfig);
   transmitting_ = true;
   transmitter_->start(now, request_.payload, request_.payloadLength);
   advanceTransmitPhase(now);
@@ -72,7 +78,8 @@ void DiagnosticTransport::advanceTransmitPhase(can::Milliseconds now) {
   isotp::TxState state = transmitter_->state();
   if (state == isotp::TxState::Complete) {
     transmitting_ = false;
-    overallDeadline_ = now + request_.responseTimeoutMs;
+    txCompleteTime_ = now;
+    responseDeadline_ = now + request_.responseTimeoutMs;
   } else if (state == isotp::TxState::BusError || state == isotp::TxState::ProtocolError ||
              state == isotp::TxState::TimedOut || state == isotp::TxState::Overflow) {
     finishWithOutcome(DiagnosticOutcome::BusError);
@@ -94,10 +101,17 @@ void DiagnosticTransport::routeFrame(can::Milliseconds now, const can::CanFrame&
   if (!acceptFrame(frame.id)) {
     return;
   }
+  responseDeadline_ = deadlineAfterFrame(now);
 
   for (size_t i = 0; i < activeReceiverCount_; ++i) {
     if (receiverSourceIds_[i] == frame.id) {
-      receivers_[i]->onFrame(now, frame);
+      if (responsePending_[i]) {
+        // This ECU said "response pending": this frame starts its real answer.
+        responsePending_[i] = false;
+        receivers_[i]->start(now, frame);
+      } else {
+        receivers_[i]->onFrame(now, frame);
+      }
       return;
     }
   }
@@ -112,10 +126,19 @@ void DiagnosticTransport::routeFrame(can::Milliseconds now, const can::CanFrame&
   rxConfig.transmitExtendedAddressByte = request_.transmitExtendedAddressByte;
   rxConfig.sendAutomaticFlowControl = request_.sendAutomaticFlowControl;
   rxConfig.frameTimeoutMs = request_.responseTimeoutMs;
-  rxConfig.flowControlId = can::obd::computeFlowControlId(frame.id, extended);
-  rxConfig.flowControlIdIsExtendedCan = extended;
+  if (request_.manualFlowControlId.has_value()) {
+    rxConfig.flowControlId = *request_.manualFlowControlId;
+    rxConfig.flowControlIdIsExtendedCan = *request_.manualFlowControlId > can::kStandardIdMax;
+  } else {
+    rxConfig.flowControlId = can::obd::computeFlowControlId(frame.id, extended);
+    rxConfig.flowControlIdIsExtendedCan = extended;
+  }
   rxConfig.flowControlBlockSize = request_.flowControlBlockSize;
   rxConfig.flowControlStMin = request_.flowControlStMin;
+  rxConfig.manualFlowControlData = request_.manualFlowControlData;
+  rxConfig.manualFlowControlDataLen = request_.manualFlowControlDataLen;
+
+  slowestResponderStartMs_ = std::max(slowestResponderStartMs_, now - txCompleteTime_);
 
   size_t slot = activeReceiverCount_++;
   receiverSourceIds_[slot] = frame.id;
@@ -144,16 +167,67 @@ void DiagnosticTransport::poll(can::Milliseconds now) {
   }
 
   size_t completeCount = 0;
+  bool anyReceiving = false;
+  bool anyPending = false;
   for (size_t i = 0; i < activeReceiverCount_; ++i) {
     receivers_[i]->poll(now);
-    if (receivers_[i]->state() == isotp::RxState::Complete) {
+    if (receivers_[i]->state() == isotp::RxState::ReceivingConsecutiveFrames) {
+      anyReceiving = true;
+    }
+    if (receivers_[i]->state() != isotp::RxState::Complete) {
+      continue;
+    }
+    if (!responsePending_[i] &&
+        isResponsePending(receivers_[i]->payload(), receivers_[i]->payloadLength())) {
+      responsePending_[i] = true;
+      pendingDeadline_ = std::max(pendingDeadline_, now + kResponsePendingTimeoutMs);
+    }
+    if (responsePending_[i]) {
+      anyPending = true;
+    } else {
       completeCount++;
     }
   }
 
-  if (completeCount >= effectiveMaxResponses_ || now >= overallDeadline_) {
+  can::Milliseconds deadline =
+      anyPending ? std::max(responseDeadline_, pendingDeadline_) : responseDeadline_;
+  if (completeCount >= effectiveMaxResponses_ || (now >= deadline && !anyReceiving)) {
     finalizeCollection(now, completeCount);
   }
+}
+
+can::Milliseconds DiagnosticTransport::deadlineAfterFrame(can::Milliseconds now) const {
+  can::Milliseconds fullRestart = now + request_.responseTimeoutMs;
+  if (request_.adaptiveTiming == AdaptiveTimingMode::Off || !latencyEstimateMs_.has_value()) {
+    return fullRestart;
+  }
+  // Wait until a little past when the slowest recent responder would have
+  // started answering, but always at least a minimum gap after this frame
+  // and never longer than a full ATST restart.
+  can::Milliseconds estimate = *latencyEstimateMs_;
+  bool aggressive = request_.adaptiveTiming == AdaptiveTimingMode::Aggressive;
+  can::Milliseconds window = aggressive ? estimate + estimate / 2 : 2 * estimate;
+  can::Milliseconds minGap = aggressive ? kAdaptiveAggressiveMinGapMs : kAdaptiveNormalMinGapMs;
+  return std::min(std::max(txCompleteTime_ + window, now + minGap), fullRestart);
+}
+
+void DiagnosticTransport::updateLatencyEstimate() {
+  // Grow at once to a slower responder; shrink back slowly.
+  can::Milliseconds observed = slowestResponderStartMs_;
+  if (!latencyEstimateMs_.has_value() || observed > *latencyEstimateMs_) {
+    latencyEstimateMs_ = observed;
+  } else {
+    latencyEstimateMs_ = (7 * *latencyEstimateMs_ + observed) / 8;
+  }
+}
+
+void DiagnosticTransport::abort() {
+  if (finished_) {
+    return;
+  }
+  transmitting_ = false;
+  result_ = DiagnosticResult{};
+  finishWithOutcome(DiagnosticOutcome::NoData);
 }
 
 void DiagnosticTransport::finalizeCollection(can::Milliseconds now, size_t completeCount) {
@@ -166,10 +240,12 @@ void DiagnosticTransport::finalizeCollection(can::Milliseconds now, size_t compl
     return;
   }
 
+  updateLatencyEstimate();
+
   bool extended = can::obd::isExtendedCan(currentProtocol_);
   result_.responderCount = 0;
   for (size_t i = 0; i < activeReceiverCount_ && result_.responderCount < kMaxResponders; ++i) {
-    if (receivers_[i]->state() != isotp::RxState::Complete) {
+    if (receivers_[i]->state() != isotp::RxState::Complete || responsePending_[i]) {
       continue;
     }
     Responder& r = result_.responders[result_.responderCount++];
@@ -212,6 +288,7 @@ void DiagnosticTransport::advanceAutoSearch(can::Milliseconds now) {
 
 void DiagnosticTransport::finishWithOutcome(DiagnosticOutcome outcome) {
   result_.outcome = outcome;
+  result_.requestFrame = requestRecorder_.firstSent();
   finished_ = true;
 }
 

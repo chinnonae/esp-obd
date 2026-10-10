@@ -14,6 +14,8 @@ namespace {
 
 constexpr const char* kResponseEndingL0 = "\r\r";
 constexpr const char* kResponseEndingL1 = "\r\n\r\n";
+constexpr const char* kLineBreakL0 = "\r";
+constexpr const char* kLineBreakL1 = "\r\n";
 
 void appendHexId(ElmReplyText& out, uint32_t id, bool extended) {
   char buf[9];
@@ -38,6 +40,10 @@ void appendBytes(ElmReplyText& out, const uint8_t* bytes, size_t count, const ch
 
 const char* responseEnding(const ElmSession& session) {
   return session.linefeedsEnabled ? kResponseEndingL1 : kResponseEndingL0;
+}
+
+const char* lineBreak(const ElmSession& session) {
+  return session.linefeedsEnabled ? kLineBreakL1 : kLineBreakL0;
 }
 
 ElmReply textReply(const ElmSession& session, const char* body) {
@@ -65,6 +71,34 @@ ElmReplyText formatResponseBody(const ElmSession& session, const can::CanFrame& 
     appendBytes(out, rawFrame.data.data(), rawBytesToShow, sep);
   } else {
     appendBytes(out, payload, payloadLen, sep);
+  }
+  return out;
+}
+
+ElmReplyText formatMultiFrameBody(const ElmSession& session, const uint8_t* payload,
+                                   size_t payloadLen, size_t firstFrameBytes,
+                                   size_t consecutiveFrameBytes) {
+  static const char kHexDigits[] = "0123456789ABCDEF";
+  ElmReplyText out;
+  const char* sep = session.spacesEnabled ? " " : "";
+
+  char lengthLine[4];
+  std::snprintf(lengthLine, sizeof(lengthLine), "%03X",
+                static_cast<unsigned>(payloadLen & 0xFFF));
+  out += lengthLine;
+
+  size_t offset = 0;
+  for (size_t index = 0; offset < payloadLen; ++index) {
+    size_t chunk = index == 0 ? firstFrameBytes : consecutiveFrameBytes;
+    if (chunk > payloadLen - offset) {
+      chunk = payloadLen - offset;
+    }
+    out += lineBreak(session);
+    out += kHexDigits[index & 0xF];
+    out += ':';
+    out += sep;
+    appendBytes(out, payload + offset, chunk, sep);
+    offset += chunk;
   }
   return out;
 }

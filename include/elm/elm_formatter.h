@@ -19,6 +19,11 @@ namespace esp_obd::elm {
 // mode": callers must mutate session.linefeedsEnabled before formatting.
 const char* responseEnding(const ElmSession& session);
 
+// "\r" (ATL0) or "\r\n" (ATL1): what ends each line of a multi-line
+// response. The final line is followed by one more, via responseEnding()'s
+// doubled form, before the prompt -- e.g. "41 00 ..\r41 00 ..\r\r>".
+const char* lineBreak(const ElmSession& session);
+
 // Wraps `body` with the current response ending into a complete Text reply.
 ElmReply textReply(const ElmSession& session, const char* body);
 
@@ -40,5 +45,20 @@ void appendHexByte(ElmReplyText& out, uint8_t value);
 ElmReplyText formatResponseBody(const ElmSession& session, const can::CanFrame& rawFrame,
                                  const uint8_t* payload, size_t payloadLen,
                                  size_t rawBytesToShow);
+
+// Headers-off (ATH0, CAF1) rendering of a multi-frame ISO-TP response, as an
+// ELM327 prints it: the payload length as three hex digits, then the payload
+// split the way it travelled on the bus, each line prefixed with its frame
+// index 0-F (wrapping):
+//   014
+//   0: 49 02 01 31 48 47
+//   1: 43 4D 38 32 36 33 33
+// `firstFrameBytes`/`consecutiveFrameBytes` are the payload bytes each frame
+// carried (6/7, or 5/6 with ISO-TP extended addressing). Lines are joined
+// with lineBreak(); there is no trailing line break. The final frame's
+// padding is not printed -- the length line already marks the end of data.
+ElmReplyText formatMultiFrameBody(const ElmSession& session, const uint8_t* payload,
+                                   size_t payloadLen, size_t firstFrameBytes,
+                                   size_t consecutiveFrameBytes);
 
 }  // namespace esp_obd::elm

@@ -100,6 +100,12 @@ can::ReceiveResult Esp32TwaiCanPort::receive() {
   return can::ReceiveResult{/*hasFrame=*/true, frame};
 }
 
+void Esp32TwaiCanPort::discardPending() {
+  if (installed_) {
+    twai_clear_receive_queue();
+  }
+}
+
 can::CanStatus Esp32TwaiCanPort::status() const {
   can::CanStatus result;
   result.configuredBitrate = currentConfig_.bitrate;

@@ -21,6 +21,9 @@ TransportOutput ElmBluetoothSession::handleLineEvent(can::Milliseconds now,
   switch (event.kind) {
     case LineEventKind::Line: {
       elm::ElmReply reply = app_.execute(now, event.text.c_str());
+      if (reply.resetPerformed) {
+        discardUntilPoll_ = true;
+      }
       if (reply.kind == elm::ElmReplyKind::DiagnosticRequest) {
         if (!app_.diagnosticPending()) {
           out += finishDiagnosticIfReady().c_str();
@@ -53,6 +56,10 @@ TransportOutput ElmBluetoothSession::handleLineEvent(can::Milliseconds now,
 TransportOutput ElmBluetoothSession::onByte(can::Milliseconds now, uint8_t byte) {
   TransportOutput out;
 
+  if (discardUntilPoll_) {
+    return out;
+  }
+
   if (app_.monitorActive()) {
     app_.stopMonitor();
     out += elm::kStoppedText;
@@ -62,10 +69,16 @@ TransportOutput ElmBluetoothSession::onByte(can::Milliseconds now, uint8_t byte)
   }
 
   if (app_.diagnosticPending()) {
-    // A well-behaved client waits for the prompt before sending another
-    // line; ignore a byte that arrives mid-transaction rather than
-    // starting a second overlapping request.
-    return out;
+    if (app_.poll(now)) {
+      // The reply was already in: deliver it, then treat the byte normally.
+      out += finishDiagnosticIfReady().c_str();
+    } else {
+      app_.abortDiagnostic();
+      out += elm::kStoppedText;
+      out += elm::responseEnding(app_.engine().session());
+      out += '>';
+      return out;
+    }
   }
 
   if (app_.engine().session().echoEnabled) {
@@ -79,6 +92,7 @@ TransportOutput ElmBluetoothSession::onByte(can::Milliseconds now, uint8_t byte)
 
 TransportOutput ElmBluetoothSession::poll(can::Milliseconds now) {
   TransportOutput out;
+  discardUntilPoll_ = false;
 
   if (app_.monitorActive()) {
     out += app_.pollMonitor(now).c_str();
