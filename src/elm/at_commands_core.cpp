@@ -70,6 +70,17 @@ std::optional<ElmReply> dispatchCoreCommand(ElmSession& session, const char* r) 
     session.displayDlcEnabled = true;
     return textReply(session, kOkText);
   }
+  // Allow long (>7 byte) messages. Stored only: CAN frames are never longer
+  // than 8 bytes, but clients (Car Scanner) send ATAL during init and a
+  // real ELM327 answers OK.
+  if (eq(r, "AL")) {
+    session.allowLongMessagesEnabled = true;
+    return textReply(session, kOkText);
+  }
+  if (eq(r, "NL")) {
+    session.allowLongMessagesEnabled = false;
+    return textReply(session, kOkText);
+  }
   if (eq(r, "R0")) {
     session.responsesEnabled = false;
     return textReply(session, kOkText);

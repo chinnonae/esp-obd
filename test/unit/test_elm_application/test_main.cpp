@@ -46,14 +46,17 @@ void test_hex_request_auto_searches_and_completes_synchronously() {
   InMemorySettingsStore store;
   app::ElmApplication application(port, store);
 
-  // A Single Frame reply is available immediately, so the whole
-  // auto-search + request/response cycle finishes within this one
-  // execute() call (SP6, 11-bit/500k, is tried first).
+  // A Single Frame reply is available immediately and the trailing "1"
+  // caps the request at one response, so the whole auto-search +
+  // request/response cycle finishes within this one execute() call (SP6,
+  // 11-bit/500k, is tried first).
   port.queueRx(*makeStandardFrame(0x7E8, {0x06, 0x41, 0x00, 0xBE, 0x1F, 0xB8, 0x10, 0x00}, 8));
 
-  elm::ElmReply reply = application.execute(0, "0100");
+  elm::ElmReply reply = application.execute(0, "01001");
   TEST_ASSERT_EQUAL(static_cast<int>(elm::ElmReplyKind::DiagnosticRequest),
                      static_cast<int>(reply.kind));
+  TEST_ASSERT_TRUE(application.takeSearchingNotice());
+  TEST_ASSERT_FALSE(application.takeSearchingNotice());  // reported once
   TEST_ASSERT_FALSE(application.diagnosticPending());
 
   elm::ElmReply finalReply = application.takeDiagnosticReply();
@@ -67,7 +70,7 @@ void test_second_request_reuses_the_discovered_protocol_without_research() {
   app::ElmApplication application(port, store);
 
   port.queueRx(*makeStandardFrame(0x7E8, {0x06, 0x41, 0x00, 0xBE, 0x1F, 0xB8, 0x10, 0x00}, 8));
-  application.execute(0, "0100");
+  application.execute(0, "01001");
   TEST_ASSERT_TRUE(application.engine().session().protocolConnected);
 
   // No auto-search this time. Without ATSH, "010C" targets the functional
@@ -266,6 +269,23 @@ void test_two_single_frame_responders_are_separated_by_one_line_break() {
                            runToCompletion(app, "01002").c_str());
 }
 
+// Frames from the reference adapter's Car Scanner log (PID 0168 on a Honda
+// hybrid): under ATH1 the last Consecutive Frame keeps its 55 padding.
+void test_headers_on_multi_frame_shows_consecutive_frame_padding_like_reference() {
+  FakeCanPort port;
+  InMemorySettingsStore store;
+  app::ElmApplication app(port, store);
+  app.execute(0, "ATSP7");
+  app.execute(0, "ATH1");
+  app.execute(0, "ATS0");
+  app.execute(0, "ATSHDA10F1");
+  port.queueRx(*makeExtendedFrame(0x18DAF110, {0x10, 0x09, 0x41, 0x68, 0x03, 0x61, 0x5B, 0x00}, 8));
+  port.queueRx(*makeExtendedFrame(0x18DAF110, {0x21, 0x00, 0x00, 0x00, 0x55, 0x55, 0x55, 0x55}, 8));
+
+  TEST_ASSERT_EQUAL_STRING("18DAF1101009416803615B00\r18DAF1102100000055555555\r\r",
+                           runToCompletion(app, "0168").c_str());
+}
+
 void test_two_responders_under_ath0_print_without_headers() {
   FakeCanPort port;
   InMemorySettingsStore store;
@@ -315,5 +335,6 @@ int main(int argc, char** argv) {
   RUN_TEST(test_two_single_frame_responders_are_separated_by_one_line_break);
   RUN_TEST(test_late_reply_to_previous_request_is_not_returned_for_the_next_one);
   RUN_TEST(test_two_responders_under_ath0_print_without_headers);
+  RUN_TEST(test_headers_on_multi_frame_shows_consecutive_frame_padding_like_reference);
   return UNITY_END();
 }

@@ -39,6 +39,15 @@ class ElmApplication {
 
   bool diagnosticPending() const { return diagnosticPending_; }
 
+  // True once, right after execute() started a protocol auto-search: the
+  // transport prints "SEARCHING..." before the request's reply, as an
+  // ELM327 does.
+  bool takeSearchingNotice() {
+    bool pending = searchingNoticePending_;
+    searchingNoticePending_ = false;
+    return pending;
+  }
+
   // Abandons the in-flight diagnostic transaction without a reply (the
   // client interrupted it -- see ElmBluetoothSession). No-op when idle.
   void abortDiagnostic();
@@ -72,6 +81,7 @@ class ElmApplication {
   diagnostic::DiagnosticTransport diagnosticTransport_;
 
   bool diagnosticPending_ = false;
+  bool searchingNoticePending_ = false;
   elm::ElmReply readyReply_;
   std::array<uint8_t, isotp::kMaxPayloadBytes> pendingPayload_{};
 };

@@ -68,6 +68,13 @@ ElmReply ElmCommandEngine::execute(const char* rawLine) {
     lastCommand_ = normalized;
     hasLastCommand_ = true;
   }
+  // A reset forgets the previous command, so an empty line right after
+  // ATZ/ATWS does nothing. Car Scanner sends several bare CRs while waiting
+  // for the reset banner; repeating ATZ (or the ATE0 sent with it) for each
+  // one would flood it with replies. The reference adapter stays silent.
+  if (reply.resetPerformed) {
+    hasLastCommand_ = false;
+  }
 
   return reply;
 }

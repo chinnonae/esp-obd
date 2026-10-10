@@ -76,6 +76,7 @@ void ElmApplication::startDiagnostic(can::Milliseconds now, const elm::ElmReply&
 
   auto fixedProtocol = elm::toObdCanProtocol(session.protocol);
   if (!session.protocolConnected || !fixedProtocol.has_value()) {
+    searchingNoticePending_ = true;
     diagnosticTransport_.startAutoSearch(now, request);
   } else {
     elm::RequestCanId requestId = elm::requestCanIdFor(session, *fixedProtocol);
@@ -198,38 +199,19 @@ elm::ElmReply ElmApplication::formatDiagnosticResult(const diagnostic::Diagnosti
       continue;
     }
 
-    // Headers-on: walk every raw frame, tracking the ISO-TP declared
-    // length across frames so only the *last* Consecutive Frame's real
-    // padding (if any) gets trimmed -- every frame before it is always
-    // fully meaningful (7 payload bytes), and a First Frame never has
-    // padding at all (2-byte PCI + 6 data bytes fill the classical
-    // 8-byte frame exactly).
-    size_t declaredLength = 0;
-    size_t consumedPayloadBytes = 0;
-    bool haveDeclaredLength = false;
-
+    // Headers-on: one line per raw frame. Under ATD0 a Single Frame is
+    // trimmed to its PCI length; First and Consecutive Frames are shown in
+    // full, padding included, exactly as the reference adapter prints them
+    // (e.g. "18DAF110 21 00 00 00 55 55 55 55") -- the First Frame's length
+    // tells the client where the data ends.
     for (size_t f = 0; f < responder.rawFrameCount; ++f) {
       const can::CanFrame& frame = responder.rawFrames[f];
       size_t rawBytesToShow = frame.dlc;
 
-      if (!renderSession.displayDlcEnabled) {  // ATD0: trim padding
+      if (!renderSession.displayDlcEnabled) {  // ATD0: trim Single Frame padding
         auto pci = isotp::parsePci(frame.data.data(), frame.dlc);
-        if (pci.has_value()) {
-          if (pci->type == isotp::PciType::SingleFrame) {
-            rawBytesToShow = std::min<size_t>(frame.dlc, 1 + pci->length);
-          } else if (pci->type == isotp::PciType::FirstFrame) {
-            declaredLength = pci->length;
-            haveDeclaredLength = true;
-            consumedPayloadBytes = frame.dlc >= 2 ? frame.dlc - 2 : 0;
-            rawBytesToShow = frame.dlc;  // FF is always fully used, never padded
-          } else if (pci->type == isotp::PciType::ConsecutiveFrame && haveDeclaredLength) {
-            size_t remaining =
-                declaredLength > consumedPayloadBytes ? declaredLength - consumedPayloadBytes : 0;
-            size_t available = frame.dlc >= 1 ? frame.dlc - 1 : 0;
-            size_t take = std::min(available, remaining);
-            rawBytesToShow = 1 + take;
-            consumedPayloadBytes += take;
-          }
+        if (pci.has_value() && pci->type == isotp::PciType::SingleFrame) {
+          rawBytesToShow = std::min<size_t>(frame.dlc, 1 + pci->length);
         }
       }
 

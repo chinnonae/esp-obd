@@ -19,5 +19,6 @@ inline constexpr const char* kUnableToConnectText = "UNABLE TO CONNECT";
 // T08 wires the "any byte stops it" side since ElmSession.monitorActive
 // already exists).
 inline constexpr const char* kStoppedText = "STOPPED";
+inline constexpr const char* kSearchingText = "SEARCHING...";
 
 }  // namespace esp_obd::elm

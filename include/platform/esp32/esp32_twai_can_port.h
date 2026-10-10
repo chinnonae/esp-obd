@@ -17,6 +17,12 @@ class Esp32TwaiCanPort : public can::ICanPort {
   can::CanStatus status() const override;
 
  private:
+  // Gets a bus-off controller running again (recovery + restart). Returns
+  // false if it is still not running within `timeout`.
+  bool ensureRunning(can::Milliseconds timeout);
+  // Aborts whatever the controller is stuck transmitting by restarting it.
+  void restartController(can::Milliseconds timeout);
+
   bool installed_ = false;
   can::CanConfig currentConfig_{};
 };

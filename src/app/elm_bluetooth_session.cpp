@@ -25,6 +25,10 @@ TransportOutput ElmBluetoothSession::handleLineEvent(can::Milliseconds now,
         discardUntilPoll_ = true;
       }
       if (reply.kind == elm::ElmReplyKind::DiagnosticRequest) {
+        if (app_.takeSearchingNotice()) {
+          out += elm::kSearchingText;
+          out += elm::lineBreak(app_.engine().session());
+        }
         if (!app_.diagnosticPending()) {
           out += finishDiagnosticIfReady().c_str();
         }
@@ -59,6 +63,12 @@ TransportOutput ElmBluetoothSession::onByte(can::Milliseconds now, uint8_t byte)
   if (discardUntilPoll_) {
     return out;
   }
+  if (discardUntilCr_) {
+    if (byte == '\r') {
+      discardUntilCr_ = false;
+    }
+    return out;
+  }
 
   if (app_.monitorActive()) {
     app_.stopMonitor();
@@ -74,6 +84,7 @@ TransportOutput ElmBluetoothSession::onByte(can::Milliseconds now, uint8_t byte)
       out += finishDiagnosticIfReady().c_str();
     } else {
       app_.abortDiagnostic();
+      discardUntilCr_ = byte != '\r';
       out += elm::kStoppedText;
       out += elm::responseEnding(app_.engine().session());
       out += '>';

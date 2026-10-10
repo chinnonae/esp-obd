@@ -18,7 +18,9 @@ must return `?`; they must not return invented values or a misleading `OK`.
   `atsh7e0` are equivalent.
 - A command completes on carriage return. A following linefeed is ignored.
 - An empty command repeats the most recently non-empty command. An empty
-  command before any previous command produces no response.
+  command before any previous command produces no response. `ATZ`/`ATWS`
+  forget the previous command, so empty commands right after a reset produce
+  no response (Car Scanner sends several while waiting for the banner).
 - A malformed, unknown, or unsupported command returns `?` followed by the
   normal response ending. It must not modify session state or transmit CAN.
 - Any valid non-empty command becomes the command that an empty command will
@@ -41,9 +43,14 @@ the prompt. Test the handler and transport separately.
   line. Any received character stops monitoring, discards that character, and
   returns `STOPPED` with a normal ending and prompt.
 - The same applies to a diagnostic request still in progress: any received
-  character abandons it, is discarded, and produces `STOPPED`, ending and
-  prompt. If the reply had already arrived, the reply is sent first and the
-  character is handled as normal input.
+  character abandons it and produces `STOPPED`, ending and prompt. That
+  character and the rest of its line, up to and including the CR, are
+  discarded and never executed (the reference adapter answers `ATRV` sent
+  mid-request with only `STOPPED`). If the reply had already arrived, the
+  reply is sent first and the character is handled as normal input.
+- The first request after `ATSP0` (or after a disconnect) prints
+  `SEARCHING...` and a line break before its reply, which includes every
+  responding ECU.
 - After `ATZ`/`ATWS`, input that had already been received when the reset ran
   (e.g. the `ATE0` in a single `ATZ\rATE0\r` write) is discarded, as a real
   ELM327 loses it while restarting.
@@ -96,7 +103,9 @@ out the identity string.
   `7E8 02 41 00\r7E9 02 41 00\r\r`.
 - `ATH1` prints CAN ID, optional DLC, then raw frame bytes. With `ATD0`, the
   same frame prints `7E8 06 41 00 BE 1F B8 10`; with `ATD1`, it prints
-  `7E8 8 06 41 00 BE 1F B8 10 00`.
+  `7E8 8 06 41 00 BE 1F B8 10 00`. `ATD0` trims only Single Frames: First
+  and Consecutive Frames are always printed in full, padding included, as the
+  reference adapter does (`18DAF110 21 00 00 00 55 55 55 55`).
 - `CAF0` prints and transmits caller-supplied raw CAN data. It does not add or
   remove ISO-TP PCI bytes.
 - Several responders under `ATH0` print as plain un-headered lines, one per
@@ -124,6 +133,7 @@ out the identity string.
 | `ATH0` / `ATH1` | Disable / enable CAN headers. | `OK`; a following frame hides/shows ID and PCI. |
 | `ATD0` / `ATD1` | Disable / enable displayed CAN DLC. | `OK`; affects only headers-on output. |
 | `ATR0` / `ATR1` | Suppress / enable received responses. | `R0` transmits a valid request but prints no ECU data and returns the normal ending. |
+| `ATAL` / `ATNL` | Allow / disallow long messages. Stored only (CAN frames never exceed 8 bytes); Car Scanner sends `ATAL` during init. | `OK`. |
 | `ATM0` / `ATM1` | Disable / enable persistence of supported settings. | `OK`; `M0` prevents later setting changes from being written to NVS. |
 | `ATFE` | Forget persisted supported settings and restore defaults. | `OK`; a reconstructed session has factory defaults. |
 | `ATRD` | Read the saved data byte. | Returns two uppercase hex digits. |
@@ -300,6 +310,17 @@ own Notes rather than duplicated here:
   WiCAN comparison (2026-10-10) it is accepted in any protocol state, and
   the header is stored ELM-style (3 bytes + `ATCP` priority) so `ATCP` now
   applies.
+- Checked against Car Scanner's log of the reference OBDII adapter
+  (2026-10-10): `ATAL`/`ATNL` accepted; an interrupting line is discarded
+  whole; a reset forgets the repeat command; auto-search prints
+  `SEARCHING...` and returns every ECU; `ATH1` shows multi-frame padding.
+  A replay of Car Scanner's init sequence is a native test.
+- The TWAI port now confirms each transmitted frame (`TX_SUCCESS`). A frame
+  nobody acknowledges (car off) is aborted by restarting the controller and
+  the request ends in `CAN ERROR`; a bus-off controller is recovered and
+  restarted before the next send. Old firmware instead went from `NO DATA`
+  to `CAN ERROR` on every request until reboot (Car Scanner log,
+  2026-09-05). Hardware-only code: compiled, not covered by native tests.
 - Also since the WiCAN comparison: input during a running request produces
   `STOPPED`; input buffered with `ATZ` is discarded; `ATSP` sets the
   `ATZ`/`ATD` default; `ATCTM` and adaptive timing take effect; `ATST00`

@@ -32,10 +32,10 @@ void DiagnosticTransport::startAutoSearch(can::Milliseconds now, const Diagnosti
   can::obd::ObdCanProtocol first = can::obd::kAutoSearchOrder[0];
   request_.requestId = can::obd::functionalRequestId(first);
   request_.requestIdIsExtendedCan = can::obd::isExtendedCan(first);
-  // Auto-search only needs one confirming response to lock a protocol; a
-  // full multi-ECU functional collection happens on a later request made
-  // through start() once already connected.
-  effectiveMaxResponses_ = request_.maxResponses.value_or(1);
+  // The request that finds the protocol is answered in full, like any other
+  // functional request (the reference adapter returns every ECU after
+  // SEARCHING...): attempts with no response still move on at the timeout.
+  effectiveMaxResponses_ = request_.maxResponses.value_or(kMaxResponders);
 
   can::CanConfig canConfig;
   canConfig.bitrate = can::obd::bitrateFor(first);

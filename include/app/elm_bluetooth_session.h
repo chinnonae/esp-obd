@@ -30,10 +30,12 @@ class ElmBluetoothSession {
   // the Bluetooth client (may be empty).
   //
   // A byte that arrives while a diagnostic request is still running
-  // interrupts it, as on an ELM327: the request is abandoned, "STOPPED" is
-  // returned, and the byte is discarded (like the byte that stops monitor
-  // mode). If the reply had in fact already arrived, it is returned first
-  // and the byte is handled normally.
+  // interrupts it, as on an ELM327: the request is abandoned and "STOPPED"
+  // is returned. The rest of that input line, up to and including its CR,
+  // is discarded too -- the reference adapter answers "ATRV" sent mid-
+  // request with just "STOPPED" and never executes it. If the reply had in
+  // fact already arrived, it is returned first and the byte is handled
+  // normally.
   //
   // After ATZ/ATWS, bytes are discarded until the next poll(): the caller
   // feeds every byte it already has before polling, so this drops exactly
@@ -58,6 +60,7 @@ class ElmBluetoothSession {
   ElmApplication& app_;
   LineReader lineReader_;
   bool discardUntilPoll_ = false;  // set by ATZ/ATWS
+  bool discardUntilCr_ = false;    // set when input interrupted a request
 };
 
 }  // namespace esp_obd::app

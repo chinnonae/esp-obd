@@ -191,8 +191,14 @@ void test_auto_search_succeeds_on_29bit_after_11bit_silence() {
 
   // Only queue the 29-bit response now that the search has moved on to it --
   // it would otherwise be drained and discarded while SP6 was still active.
+  // Two ECUs answer the request that finds the protocol; both are kept (the
+  // reference adapter prints every ECU after SEARCHING...).
   port.queueRx(singleFrameResponse(0x18DAF110, {0x02, 0x41, 0x00, 0, 0, 0, 0, 0}, /*extended=*/true));
   transport.poll(210);
+  TEST_ASSERT_FALSE(transport.finished());  // still collecting
+  port.queueRx(singleFrameResponse(0x18DAF1EF, {0x02, 0x41, 0x00, 0, 0, 0, 0, 0}, /*extended=*/true));
+  transport.poll(215);
+  transport.poll(415);  // 200ms after the last response
 
   TEST_ASSERT_TRUE(transport.finished());
   const DiagnosticResult& result = transport.result();
@@ -200,8 +206,9 @@ void test_auto_search_succeeds_on_29bit_after_11bit_silence() {
   TEST_ASSERT_TRUE(result.connectedProtocol.has_value());
   TEST_ASSERT_EQUAL(static_cast<int>(obd::ObdCanProtocol::Iso15765_29bit_500k),
                      static_cast<int>(*result.connectedProtocol));
-  TEST_ASSERT_EQUAL(1, result.responderCount);
+  TEST_ASSERT_EQUAL(2, result.responderCount);
   TEST_ASSERT_EQUAL_UINT32(0x18DAF110, result.responders[0].sourceId);
+  TEST_ASSERT_EQUAL_UINT32(0x18DAF1EF, result.responders[1].sourceId);
 }
 
 void test_auto_search_exhaustion_yields_unable_to_connect() {
