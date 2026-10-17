@@ -1,0 +1,34 @@
+#pragma once
+
+#include <cstdint>
+#include <optional>
+
+#include "core/fixed_string.h"
+
+namespace esp_obd::elm {
+
+inline constexpr size_t kElmReplyTextCapacity = 256;
+using ElmReplyText = FixedString<kElmReplyTextCapacity>;
+
+enum class ElmReplyKind {
+  Text,               // text is a complete response body + ending
+  NoReply,            // empty command with no prior command to repeat
+  DiagnosticRequest,  // valid hex request; text holds the normalized
+                      // payload hex (PCI/response-count nibble already
+                      // stripped); no CAN transmitted yet -- T06 executes it
+  CanStatusRequest,   // ATCS: app/ formats the real reply from ICanPort::status()
+  SendRtrRequest,     // ATRTR: app/ builds and sends the RTR frame, then replies
+};
+
+struct ElmReply {
+  ElmReplyKind kind = ElmReplyKind::Text;
+  ElmReplyText text;
+  bool appendPrompt = true;
+  std::optional<uint8_t> diagnosticMaxResponses;  // only for DiagnosticRequest
+  // ATZ/ATWS: the adapter "reset". Input already received when the reset
+  // ran is discarded, as a real ELM327 loses it while restarting -- see
+  // app::ElmBluetoothSession.
+  bool resetPerformed = false;
+};
+
+}  // namespace esp_obd::elm

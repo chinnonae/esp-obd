@@ -1,0 +1,305 @@
+:root {
+  color-scheme: dark;
+  --bg: #101418;
+  --bg-raised: #1a2028;
+  --border: #2a323c;
+  --text: #e8edf2;
+  --text-dim: #8b98a5;
+  --accent: #3ba7ff;
+  --ok: #3bd671;
+  --err: #ff5c5c;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border);
+}
+
+.app-title {
+  font-size: 1.1rem;
+  margin: 0;
+}
+
+.header-status {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.protocol-status {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  min-width: 120px;
+  text-align: right;
+}
+
+.protocol-status[data-state="searching"] {
+  color: var(--accent);
+}
+
+.protocol-status[data-state="connected"] {
+  color: var(--ok);
+  font-weight: 500;
+}
+
+.protocol-status[data-state="error"] {
+  color: var(--err);
+}
+
+.connection {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.sim-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.status {
+  font-size: 0.85rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+}
+
+.status--disconnected {
+  color: var(--text-dim);
+}
+
+.status--connected {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
+.status--error {
+  color: var(--err);
+  border-color: var(--err);
+}
+
+button {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.4rem 0.9rem;
+  cursor: pointer;
+}
+
+button:hover {
+  border-color: var(--accent);
+}
+
+.tab-bar {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-raised);
+}
+
+.tab-button {
+  flex: 1;
+  border: none;
+  border-radius: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  padding: 0.75rem;
+}
+
+.tab-button[aria-selected="true"] {
+  border-bottom-color: var(--accent);
+  color: var(--accent);
+}
+
+.views {
+  flex: 1;
+  padding: 1rem;
+}
+
+.view {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.view[hidden] {
+  display: none;
+}
+
+.console-toolbar {
+  margin-bottom: 0.5rem;
+}
+
+.console-log {
+  flex: 1;
+  overflow-y: auto;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 0.8rem;
+}
+
+.console-line {
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.console-line--tx {
+  color: var(--accent);
+}
+
+.console-line--rx {
+  color: var(--text);
+}
+
+.console-line--info {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.tile-group {
+  margin-bottom: 1.25rem;
+}
+
+.tile-group h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  color: var(--text-dim);
+}
+
+.poll-status {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  margin-bottom: 0.75rem;
+}
+
+.tile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.75rem;
+}
+
+.timeseries-controls {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.timeseries-controls select {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.3rem 0.5rem;
+}
+
+.timeseries-canvas {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  max-width: 100%;
+}
+
+.config-upload {
+  display: block;
+  margin-bottom: 0.75rem;
+}
+
+.config-status {
+  min-height: 1.2em;
+  margin-bottom: 0.75rem;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+.config-status--error {
+  color: var(--err);
+}
+
+.config-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.config-toggle input[type="checkbox"] {
+  cursor: pointer;
+}
+
+.profile-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.profile-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+}
+
+.profile-row--active {
+  border-color: var(--accent);
+}
+
+.profile-name {
+  flex: 1;
+}
+
+.config-attribution {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+.config-attribution a {
+  color: var(--accent);
+}
+
+.tile {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem;
+}
+
+.tile .tile-name {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+.tile .tile-value {
+  font-size: 1.5rem;
+  font-weight: 600;
+}

@@ -1,37 +1,53 @@
-# ESP-OBD Hello World
+# ESP-OBD
 
-A simple hello world application for the ESP32 using PlatformIO.
+An ESP32 Bluetooth Classic ELM327-compatible adapter for **Classical CAN
+OBD-II**, reimplemented from a clean start (see
+[Reimplementation plan](#reimplementation-plan) below).
 
-## Prerequisites
+The firmware presents Bluetooth Classic SPP as the ELM327 command channel
+(AT commands, diagnostic requests, monitor mode) and UART0 as a separate
+`#HELP`/`#STATUS`/`#DBG`/`#REBOOT` debug console. It is code-complete and
+covered by the native test suite, but has not yet been run against real
+hardware, a scanner app, or a vehicle -- see
+[T07](docs/tasks/07-esp32-platform-adapters.md)'s and
+[T10](docs/tasks/10-validation-and-release-gate.md)'s status before relying
+on it.
 
-- PlatformIO CLI installed
-- Python environment set up (virtual environment in `.venv`)
+## Hardware and safety
 
-## Building
+Confirmed values live in [include/core/hardware_constants.h](include/core/hardware_constants.h)
+and [include/core/build_info.h](include/core/build_info.h); this section only
+summarizes them.
 
-```bash
-pio build -e ioxesp32
-```
+- Target board: `ioxesp32` (see `platformio.ini`).
+- CAN: ESP32 TWAI peripheral on GPIO 26 (TX) / GPIO 27 (RX), through a
+  **Classical CAN** transceiver only. No CAN FD.
+- Status LED: the board's built-in LED (GPIO 5), active-high.
+- Bluetooth: Classic SPP, advertised as `ESP-OBD`, fixed pairing PIN `5678`.
+  This is the only ELM327 command channel.
+- UART0 is a separate debug console. Its output is always prefixed `#DBG:`
+  and is never sent to Bluetooth.
 
-## Uploading
+This board and firmware do **not** support J1850, ISO 9141/KWP electrical
+interfaces, battery-voltage measurement, or ignition sensing — there is no
+wiring for any of them. Any document or reply claiming otherwise is wrong.
 
-```bash
-pio run -e ioxesp32 -t upload
-```
+### Board source
 
-## Monitoring
+This project targets the "ESP-OBD2" board sold by Artron Shop:
+[product page](https://www.artronshop.co.th/product/733/esp-obd2-%E0%B8%9A%E0%B8%AD%E0%B8%A3%E0%B9%8C%E0%B8%94-esp32-%E0%B9%80%E0%B8%8A%E0%B8%B7%E0%B9%88%E0%B8%AD%E0%B8%A1%E0%B8%95%E0%B9%88%E0%B8%AD-obd2-can-bus).
+The vendor also publishes circuit-level references:
 
-```bash
-pio device monitor -e ioxesp32
-```
+- [Schematic (PDF)](https://dl.artronshop.co.th/ESP-OBD2/Schematic.pdf)
+- [Board dimensions (PDF)](https://dl.artronshop.co.th/ESP-OBD2/Dimension.pdf)
 
-You should see "Hello, World!" printed to the serial console.
+These are third-party documents, not maintained by this repository; the pin
+assignments above (GPIO 26/27 for CAN, GPIO 5 for the status LED) are the
+values this firmware actually uses and take precedence over anything in the
+vendor files if they ever disagree.
 
-## Project Structure
-
-- `platformio.ini` - PlatformIO configuration
-- `src/main.cpp` - Main application code
-
+> [!WARNING]
+> This adapter can transmit diagnostic traffic, including services that can
 > write to or reconfigure an ECU. There is no firmware-level whitelist or
 > unlock gate on requests — see the write/control request policy in
 > [T00's decision log](docs/tasks/00-project-baseline.md#decision-log). Any

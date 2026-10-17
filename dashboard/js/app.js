@@ -1,0 +1,149 @@
+// Bootstraps the app shell: service worker registration, tab switching, and
+// the Connect button wired to the Web Serial + ELM327 init flow (or the
+// in-browser simulator, for local dev/testing without real hardware).
+
+import * as serial from "./serial.js";
+import * as simulator from "./simulator.js";
+import * as elm from "./elm.js";
+import * as configStore from "./config-store.js";
+import * as pollEngine from "./poll-engine.js";
+import * as currentView from "./views/current.js";
+import * as consoleView from "./views/console.js";
+import * as configView from "./views/config.js";
+import * as timeseriesView from "./views/timeseries.js";
+
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) {
+    return;
+  }
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch((err) => {
+      console.error("Service worker registration failed:", err);
+    });
+  });
+}
+
+function initTabs() {
+  const tabButtons = document.querySelectorAll(".tab-button");
+  const views = document.querySelectorAll(".view");
+
+  tabButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const target = button.dataset.tab;
+
+      tabButtons.forEach((btn) => btn.setAttribute("aria-selected", String(btn === button)));
+      views.forEach((view) => {
+        view.hidden = view.dataset.view !== target;
+      });
+    });
+  });
+}
+
+function setStatus(statusEl, text, variant) {
+  statusEl.textContent = text;
+  statusEl.className = `status status--${variant}`;
+}
+
+function initProtocolDisplay() {
+  const protocolStatusEl = document.getElementById("protocol-status");
+
+  // Listen for protocol changes from serial module
+  serial.onEvent((event) => {
+    if (event.type === "protocol") {
+      if (event.protocol === null) {
+        protocolStatusEl.textContent = "—";
+        protocolStatusEl.removeAttribute("data-state");
+      } else if (event.protocol === "Auto-search") {
+        protocolStatusEl.textContent = "🔍 Searching...";
+        protocolStatusEl.setAttribute("data-state", "searching");
+      } else {
+        protocolStatusEl.textContent = `✓ ${event.protocol}`;
+        protocolStatusEl.setAttribute("data-state", "connected");
+      }
+    }
+  });
+}
+
+function initConnectButton() {
+  const connectButton = document.getElementById("connect-button");
+  const statusEl = document.getElementById("connection-status");
+  const simToggle = document.getElementById("simulator-toggle");
+
+  const hasWebSerial = "serial" in navigator;
+  if (!hasWebSerial) {
+    simToggle.checked = true;
+    simToggle.disabled = true; // Web Serial unavailable -- simulator is the only option
+  }
+
+  let transport = null; // whichever module (serial.js or simulator.js) is currently connected
+
+  async function doConnect(mod) {
+    connectButton.disabled = true;
+    simToggle.disabled = true;
+    setStatus(statusEl, "Connecting...", "disconnected");
+    try {
+      await mod.connect();
+      await elm.initSession(mod);
+      transport = mod;
+      setStatus(statusEl, mod === simulator ? "Connected (simulator)" : "Connected", "connected");
+      connectButton.textContent = "Disconnect";
+      pollEngine.start(mod, elm, configStore);
+    } catch (err) {
+      console.error("Connect failed:", err);
+      setStatus(statusEl, "Connect failed", "error");
+      await mod.disconnect().catch(() => {});
+      simToggle.disabled = !hasWebSerial;
+    } finally {
+      connectButton.disabled = false;
+    }
+  }
+
+  connectButton.addEventListener("click", async () => {
+    if (transport?.isConnected()) {
+      pollEngine.stop();
+      await transport.disconnect();
+      transport = null;
+      setStatus(statusEl, "Disconnected", "disconnected");
+      connectButton.textContent = "Connect";
+      simToggle.disabled = !hasWebSerial;
+      return;
+    }
+    await doConnect(simToggle.checked ? simulator : serial);
+  });
+
+  // Try to reopen a previously authorized real port without a new user
+  // gesture. Left enabled while this runs: serial.js's own connect/
+  // tryReconnect guard rejects a manual click that overlaps this, rather
+  // than the button staying disabled indefinitely -- open() on some real
+  // adapters can hang far longer than any reasonable UI timeout (observed:
+  // a stale Bluetooth SPP pairing can block open() well past 8s).
+  if (hasWebSerial) {
+    serial
+      .tryReconnect()
+      .then((reconnected) => {
+        if (!reconnected) {
+          return;
+        }
+        return elm.initSession(serial).then(() => {
+          transport = serial;
+          setStatus(statusEl, "Connected", "connected");
+          connectButton.textContent = "Disconnect";
+          simToggle.disabled = true;
+          pollEngine.start(serial, elm, configStore);
+        });
+      })
+      .catch((err) => {
+        console.error("Reconnect failed:", err);
+        return serial.disconnect().catch(() => {});
+      });
+  }
+}
+
+registerServiceWorker();
+initTabs();
+initProtocolDisplay();
+initConnectButton();
+currentView.init();
+consoleView.init();
+configView.init();
+timeseriesView.init();
