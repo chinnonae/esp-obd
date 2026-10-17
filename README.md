@@ -9,10 +9,13 @@ that talk to it.
 | [apps/dashboard/](apps/dashboard/README.md) | Web dashboard (PWA), deployed to GitHub Pages. | HTML, JavaScript |
 | [apps/android/](apps/android/README.md) | Android app (planned). | Flutter |
 
-Shared, not owned by any one project:
+The dashboard's vehicle profiles in `apps/dashboard/data/` are generated
+from [OBDb](https://github.com/OBDb) signal sets (Honda-Civic, SAEJ1979); see
+the `*.ATTRIBUTION.md` files there. The OBDb repositories are not vendored:
+some of their test-case filenames contain `|`, which Windows cannot check
+out. Clone them separately (a sparse checkout of `signalsets/` works on
+Windows) when the data needs regenerating.
 
-- `third_party/` — OBDb signal definitions (Honda-Civic, SAEJ1979), kept as
-  separate git checkouts and not tracked here.
 ## Firmware quick start
 
 Use PlatformIO IDE in VS Code (see [Editor setup](#editor-setup)); Build and

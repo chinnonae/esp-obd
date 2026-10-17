@@ -6,8 +6,11 @@
 **/.vscode/launch.json
 **/.vscode/ipch
 
-# Python env shared by the firmware's native tests (zig toolchain), at the repo root.
+# Python envs, e.g. firmware/.venv (zig toolchain for the native tests).
 .venv/
 
 # Local WiFi secrets: never commit.
 wifi_credentials.h
+
+# Dashboard drive recordings (large local data).
+apps/dashboard/recordings/
