@@ -7,7 +7,7 @@ rationale behind choices made along the way.
 
 ## Context
 
-ESP-OBD is a Bluetooth Classic ELM327-emulating CAN bridge ([../../README.md](../../README.md))
+ESP-OBD is a Bluetooth Classic ELM327-emulating CAN bridge ([firmware/README.md](../../../firmware/README.md))
 with no WiFi/HTTP support — it just relays ELM327 AT commands and raw OBD hex
 requests between a paired host and the vehicle's CAN bus. There was no
 existing dashboard. The user asked for a browser-only tool (no backend/server)

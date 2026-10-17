@@ -1,0 +1,22 @@
+{
+  // Open with File > Open Workspace from File... PlatformIO IDE only detects
+  // projects whose platformio.ini sits at the root of a workspace folder, so
+  // firmware/ is listed as its own folder.
+  "folders": [
+    { "name": "firmware", "path": "firmware" },
+    { "name": "dashboard", "path": "apps/dashboard" },
+    { "name": "android", "path": "apps/android" },
+    { "name": "esp-obd (repo root)", "path": "." }
+  ],
+  "settings": {
+    // The repo root also contains firmware/ and apps/; hide them there so
+    // each file shows up once, under its own folder.
+    "files.exclude": {
+      "firmware": true,
+      "apps": true
+    }
+  },
+  "extensions": {
+    "recommendations": ["platformio.platformio-ide"]
+  }
+}

@@ -1,0 +1,5 @@
+# Host C/C++ compiler for the native unit tests (pio test -e native_test),
+# used through test/native_tools/*.cmd. Install into firmware/.venv:
+#   python -m venv .venv
+#   .venv\Scripts\python.exe -m pip install -r requirements-test.txt
+ziglang==0.16.0

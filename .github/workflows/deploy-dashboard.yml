@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - 'dashboard/**'
+      - 'apps/dashboard/**'
       - '.github/workflows/deploy-dashboard.yml'
   workflow_dispatch:
 
@@ -34,7 +34,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: 'dashboard'
+          path: 'apps/dashboard'
 
       - name: Deploy to GitHub Pages
         id: deployment

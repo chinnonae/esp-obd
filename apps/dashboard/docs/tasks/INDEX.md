@@ -1,7 +1,7 @@
 # Dashboard Task Index
 
 Execution board for the ESP-OBD dashboard SPA. Mirrors the conventions of the
-firmware's [../../../docs/tasks/INDEX.md](../../../docs/tasks/INDEX.md), with
+firmware's [firmware/docs/tasks/INDEX.md](../../../../firmware/docs/tasks/INDEX.md), with
 a separate `D`-prefixed numbering so it isn't confused with the firmware's
 `T`-numbered tasks — this is a standalone browser app, not firmware work.
 
